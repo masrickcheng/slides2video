@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>「龙虾Claw」从何而来？</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700;900&family=Noto+Sans+SC:wght@300;400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #0d1117;
+    --ink2: #161b22;
+    --ink3: #21262d;
+    --gold: #d4a843;
+    --gold-dim: #9a7a30;
+    --jade: #5ab89c;
+    --amber: #e8874a;
+    --silver: #8b949e;
+    --white: #e6edf3;
+    --white-dim: #b0bac6;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width:100%; height:100%; background:#000; overflow:hidden; font-family:'Noto Sans SC',sans-serif; color:var(--white); }
+
+  #deck { width:100%; height:100%; display:flex; align-items:center; justify-content:center; }
+
+  #stage {
+    position: relative;
+    width: min(100vw, calc(100vh * 9 / 16));
+    height: min(100vh, calc(100vw * 16 / 9));
+    overflow: hidden;
+  }
+
+  .slide {
+    position: absolute; inset: 0;
+    background: var(--ink);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 52px 32px 52px;
+    gap: 0;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.4s ease;
+  }
+  .slide.active { opacity:1; pointer-events:all; }
+
+  .slide::before {
+    content:''; position:absolute; inset:0;
+    background-image:
+      linear-gradient(rgba(212,168,67,0.025) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(212,168,67,0.025) 1px,transparent 1px);
+    background-size:40px 40px; pointer-events:none;
+  }
+
+  #nav { position:absolute; bottom:18px; left:50%; transform:translateX(-50%); display:flex; gap:7px; z-index:10; }
+  .dot { width:7px; height:7px; border-radius:50%; background:var(--ink3); border:1px solid var(--gold-dim); cursor:pointer; transition:all 0.3s; }
+  .dot.active { background:var(--gold); border-color:var(--gold); transform:scale(1.4); }
+
+  #progress { position:absolute; bottom:0; left:0; height:3px; background:linear-gradient(90deg,var(--gold),var(--amber)); transition:width 0.4s ease; z-index:20; }
+  #counter { position:absolute; top:14px; right:18px; font-family:'Space Mono',monospace; font-size:11px; color:var(--silver); z-index:10; }
+
+  /* Typography — sized for phone readability */
+  .label { font-family:'Space Mono',monospace; font-size:11px; letter-spacing:0.2em; text-transform:uppercase; color:var(--gold); margin-bottom:12px; text-align:center; }
+  h1 { font-family:'Noto Serif SC',serif; font-weight:900; font-size:2.4rem; line-height:1.25; text-align:center; }
+  h2 { font-family:'Noto Serif SC',serif; font-weight:700; font-size:1.9rem; line-height:1.3; text-align:center; }
+  h3 { font-family:'Noto Serif SC',serif; font-weight:600; font-size:1.15rem; color:var(--gold); margin-bottom:8px; }
+  p { font-size:1rem; line-height:1.8; color:var(--white-dim); }
+  .accent { color:var(--gold); }
+  .jade { color:var(--jade); }
+  .amber { color:var(--amber); }
+  strong { color:var(--white); }
+
+  .divider { width:48px; height:2px; background:linear-gradient(90deg,var(--gold),transparent); margin:14px auto; }
+
+  .card { background:var(--ink2); border:1px solid var(--ink3); border-radius:14px; padding:20px; position:relative; overflow:hidden; width:100%; }
+  .card::before { content:''; position:absolute; top:0;left:0;right:0;height:3px; background:linear-gradient(90deg,var(--gold),transparent); }
+  .card.jade-top::before { background:linear-gradient(90deg,var(--jade),transparent); }
+  .card.amber-top::before { background:linear-gradient(90deg,var(--amber),transparent); }
+
+  .pill { display:inline-block; background:rgba(212,168,67,0.12); border:1px solid rgba(212,168,67,0.28); color:var(--gold); padding:4px 12px; border-radius:20px; font-size:0.82rem; font-family:'Space Mono',monospace; }
+  .pill.j { background:rgba(90,184,156,0.12); border-color:rgba(90,184,156,0.28); color:var(--jade); }
+  .pill.a { background:rgba(232,135,74,0.12); border-color:rgba(232,135,74,0.28); color:var(--amber); }
+
+  .arrow-list { list-style:none; display:flex; flex-direction:column; gap:10px; }
+  .arrow-list li { display:flex; gap:10px; align-items:flex-start; font-size:0.95rem; color:var(--white-dim); line-height:1.65; }
+  .arrow-list li::before { content:'›'; color:var(--gold); font-size:1.3rem; line-height:1.3; flex-shrink:0; }
+
+  .quote { border-left:4px solid var(--gold); padding:14px 18px; background:rgba(212,168,67,0.05); border-radius:0 10px 10px 0; width:100%; }
+  .quote p { font-style:italic; color:var(--white); font-size:0.95rem; }
+  .quote .attr { color:var(--silver); font-size:0.78rem; margin-top:6px; }
+
+  .deco { position:absolute; font-size:8rem; opacity:0.04; pointer-events:none; user-select:none; }
+
+  .stat-big { font-family:'Space Mono',monospace; font-size:2.2rem; font-weight:700; color:var(--gold); line-height:1; display:block; }
+  .stat-big.j { color:var(--jade); }
+  .stat-big.a { color:var(--amber); }
+  .stat-sub { font-size:0.8rem; color:var(--silver); margin-top:6px; display:block; }
+
+  .tl-row { display:flex; align-items:flex-start; gap:16px; width:100%; }
+  .tl-year { font-family:'Space Mono',monospace; font-size:0.85rem; font-weight:700; color:var(--gold); min-width:36px; padding-top:2px; }
+  .tl-body { flex:1; border-left:2px solid var(--ink3); padding-left:14px; padding-bottom:20px; }
+  .tl-title { font-size:1rem; color:var(--white); font-weight:600; margin-bottom:4px; }
+  .tl-desc { font-size:0.88rem; color:var(--white-dim); line-height:1.6; }
+</style>
+</head>
+<body>
+<div id="deck"><div id="stage">
+
+<!-- ===== 01 COVER ===== -->
+<div class="slide active" style="justify-content:center;gap:0;">
+  <div class="deco" style="bottom:-20px;right:-15px;font-size:10rem;">🦞</div>
+  <div class="label">名字的秘密</div>
+  <h1>「龙虾<span class="accent">Claw</span>」<br>从何而来？</h1>
+  <div class="divider"></div>
+  <p style="text-align:center;max-width:280px;margin:0 auto;font-size:1.05rem;">一个名字，串起了<br>AI 时代与信息论的<strong>百年传承</strong></p>
+  <div style="margin-top:32px;display:flex;flex-direction:column;gap:10px;width:100%;">
+    <div style="display:flex;align-items:center;gap:12px;justify-content:center;font-size:0.95rem;color:var(--white-dim);">
+      <span style="color:var(--gold);font-weight:700;">OpenClaw</span>
+      <span style="color:var(--silver);">→</span>
+      <span>ClawdBot</span>
+      <span style="color:var(--silver);">→</span>
+      <span style="color:var(--jade);">Claude AI</span>
+      <span style="color:var(--silver);">→</span>
+      <span style="color:var(--amber);">香农</span>
+    </div>
+  </div>
+  <p style="margin-top:28px;font-size:0.82rem;color:var(--silver);text-align:center;">← 左右滑动翻页 →</p>
+</div>
+
+<!-- ===== 02 OPENCLAW & CLAWDBOT ===== -->
+<div class="slide">
+  <div class="deco" style="top:-10px;left:-10px;">🦞</div>
+  <div class="label">溯源 · 第一步</div>
+  <h2>从 <span class="accent">ClawdBot</span><br>到 OpenClaw</h2>
+  <div class="divider"></div>
+
+  <div style="display:flex;flex-direction:column;gap:14px;width:100%;margin-top:8px;">
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+        <span class="pill">2025年11月</span>
+        <span style="font-size:0.85rem;color:var(--silver);">最初版本</span>
+      </div>
+      <h3 style="color:var(--white);">ClawdBot</h3>
+      <p>奥地利开发者 <strong>Peter Steinberger</strong> 的周末项目。一个人，几个周末，写出了改变世界的第一行代码。</p>
+    </div>
+    <div class="card jade-top">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+        <span class="pill j">2026年1月</span>
+        <span style="font-size:0.85rem;color:var(--silver);">正式定名</span>
+      </div>
+      <h3 style="color:var(--jade);">OpenClaw</h3>
+      <p>改名开源，90天内成为 <strong>GitHub 史上增长最快</strong>的项目，Stars 超越 React 和 Linux。</p>
+    </div>
+  </div>
+
+  <div class="quote" style="margin-top:14px;">
+    <p>「Claw」= 爪子，龙虾的爪子，也是 Claude 的谐音</p>
+  </div>
+</div>
+
+<!-- ===== 03 CLAUDE AI ===== -->
+<div class="slide">
+  <div class="label">溯源 · 第二步</div>
+  <h2>蹭了谁的<span class="accent">流量</span>？</h2>
+  <div class="divider"></div>
+
+  <div style="display:flex;flex-direction:column;gap:16px;width:100%;margin-top:8px;">
+    <div class="card jade-top">
+      <h3 style="color:var(--jade);">Anthropic Claude</h3>
+      <p>OpenClaw 最初默认集成的 AI 模型就是 <strong>Claude</strong>——Anthropic 公司出品，公认 Agent 任务效果最强的大语言模型。</p>
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+        <span class="pill j">世界顶级 AI 模型</span>
+        <span class="pill j">Agent 任务最强</span>
+      </div>
+    </div>
+
+    <div style="background:rgba(90,184,156,0.06);border:1px solid rgba(90,184,156,0.2);border-radius:14px;padding:20px;text-align:center;">
+      <div style="font-size:2.8rem;margin-bottom:10px;">🦞</div>
+      <p style="font-size:1rem;color:var(--white);">ClawdBot 的「Clawd」</p>
+      <p style="font-size:0.88rem;color:var(--silver);margin-top:4px;">= Claw（爪子）+ d（Claude 的谐音）</p>
+    </div>
+
+    <div class="quote">
+      <p>那 Anthropic 为何把自家模型叫「Claude」？<br>
+      <span style="font-size:0.88em;color:var(--silver);">答案要追溯到 77 年前……</span></p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 04 SHANNON INTRO ===== -->
+<div class="slide">
+  <div class="label">溯源 · 第三步</div>
+  <h2>认识<span class="amber">克劳德·香农</span></h2>
+  <div class="divider"></div>
+
+  <div style="display:flex;gap:18px;align-items:flex-start;width:100%;margin-bottom:16px;">
+    <img src="https://files.lingti.com/images/claude-shannon.png" alt="克劳德·香农"
+      style="width:110px;height:138px;object-fit:cover;border-radius:10px;border:2px solid rgba(232,135,74,0.5);flex-shrink:0;">
+    <div>
+      <h3 style="color:var(--amber);font-size:1.2rem;">克劳德·香农</h3>
+      <p style="font-size:0.82rem;color:var(--silver);margin-bottom:10px;">Claude Elwood Shannon<br>1916–2001 · 美国数学家</p>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <span class="pill a" style="font-size:0.78rem;width:fit-content;">MIT 数学博士</span>
+        <span class="pill a" style="font-size:0.78rem;width:fit-content;">贝尔实验室</span>
+        <span class="pill a" style="font-size:0.78rem;width:fit-content;">信息论创始人</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card amber-top">
+    <h3 style="color:var(--amber);">「信息时代的爱因斯坦」</h3>
+    <p>Anthropic 将旗舰模型命名为 Claude，正是向这位传奇数学家致敬。他的工作是整个数字世界的数学地基。</p>
+  </div>
+
+  <div class="quote" style="margin-top:14px;">
+    <p>「Shannon 的指纹，印在我们每一台电子设备、每一块屏幕上。」</p>
+    <div class="attr">— 历史学家 James Gleick</div>
+  </div>
+</div>
+
+<!-- ===== 05 SHANNON 1948 ===== -->
+<div class="slide">
+  <div class="deco" style="bottom:-20px;right:-10px;font-size:9rem;opacity:0.04;">∞</div>
+  <div class="label">1948年 · 改变世界的论文</div>
+  <h2>51页，<span class="accent">奠定数字文明</span></h2>
+  <div class="divider"></div>
+
+  <div style="display:flex;flex-direction:column;gap:14px;width:100%;margin-top:6px;">
+    <div class="card" style="text-align:center;padding:22px;">
+      <div style="font-family:'Noto Serif SC',serif;font-size:1rem;color:var(--silver);margin-bottom:8px;">《通信的数学理论》</div>
+      <div style="font-family:'Space Mono',monospace;font-size:1.1rem;color:var(--gold);">A Mathematical Theory<br>of Communication</div>
+      <div style="margin-top:12px;font-size:0.88rem;color:var(--white-dim);">被称为<strong style="color:var(--white);">「信息时代的大宪章」</strong></div>
+    </div>
+
+    <ul class="arrow-list">
+      <li>用数学证明「信息」可以被<strong>精确量化</strong></li>
+      <li>发明「<strong>比特（bit）</strong>」作为信息的度量单位</li>
+      <li>证明任何信息都可用 <strong>0 和 1</strong> 无损表示和传输</li>
+      <li>奠定了压缩、加密、纠错码的理论基础</li>
+    </ul>
+
+    <div style="display:flex;gap:10px;">
+      <div class="card" style="flex:1;text-align:center;padding:14px 8px;">
+        <span class="stat-big" style="font-size:1.6rem;">bit</span>
+        <span class="stat-sub">他命名的单位</span>
+      </div>
+      <div class="card jade-top" style="flex:1;text-align:center;padding:14px 8px;">
+        <span class="stat-big j" style="font-size:1.6rem;">10¹²⁰</span>
+        <span class="stat-sub">香农数<br>国际象棋复杂度</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 06 SHANNON FUN ===== -->
+<div class="slide">
+  <div class="label">你不知道的香农</div>
+  <h2>天才的<span class="accent">另一面</span></h2>
+  <div class="divider"></div>
+
+  <div style="display:flex;flex-direction:column;gap:12px;width:100%;margin-top:6px;">
+    <div class="card jade-top">
+      <h3 style="color:var(--jade);">🐭 Theseus — 最早的 AI（1950）</h3>
+      <p>香农造了一只电动机械鼠，能在迷宫中<strong>自主学习</strong>找到出路——比「人工智能」这个词的诞生还早 6 年。</p>
+    </div>
+    <div class="card">
+      <h3>🎪 独轮车 · 杂耍 · 火焰喷射小号</h3>
+      <p>贝尔实验室走廊里经常出现他骑独轮车抛球的身影。他还造了<strong>火焰喷射小号</strong>和会解魔方的机器——「因为好玩」。</p>
+    </div>
+    <div class="card amber-top">
+      <h3 style="color:var(--amber);">💰 比巴菲特还厉害</h3>
+      <p>他的长期投资年化回报约 <strong>28%</strong>，跑赢巴菲特的 27%，超越 1025/1026 只共同基金。</p>
+    </div>
+    <div class="card" style="background:rgba(212,168,67,0.05);border-color:rgba(212,168,67,0.2);">
+      <h3>🤝 与图灵共事</h3>
+      <p>二战期间香农与图灵在贝尔实验室相遇，两人共同探讨「机器能否思考」——<strong>AI 概念的最早萌芽</strong>之一。</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 07 TIMELINE / CONCLUSION ===== -->
+<div class="slide">
+  <div class="deco" style="top:-10px;right:-10px;">🦞</div>
+  <div class="label">一脉相承</div>
+  <h2>从 <span class="accent">1948</span> 到 <span class="jade">2025</span></h2>
+  <div class="divider"></div>
+
+  <div style="display:flex;flex-direction:column;gap:0;width:100%;margin-top:8px;">
+    <div class="tl-row">
+      <div class="tl-year" style="color:var(--amber);">1948</div>
+      <div class="tl-body" style="border-color:rgba(232,135,74,0.3);">
+        <div class="tl-title">香农发表《通信的数学理论》</div>
+        <div class="tl-desc">信息可被量化、压缩、无损传输</div>
+      </div>
+    </div>
+    <div class="tl-row">
+      <div class="tl-year" style="color:var(--silver);">1956</div>
+      <div class="tl-body" style="border-color:rgba(139,148,158,0.3);">
+        <div class="tl-title">达特茅斯会议，香农联合创立 AI</div>
+        <div class="tl-desc">「人工智能」这个词在这里诞生</div>
+      </div>
+    </div>
+    <div class="tl-row">
+      <div class="tl-year" style="color:var(--jade);">2021</div>
+      <div class="tl-body" style="border-color:rgba(90,184,156,0.3);">
+        <div class="tl-title">Anthropic 成立，以 Claude 命名</div>
+        <div class="tl-desc">向信息论创始人 Claude Shannon 致敬</div>
+      </div>
+    </div>
+    <div class="tl-row">
+      <div class="tl-year" style="color:var(--gold);">2025</div>
+      <div class="tl-body" style="border-color:rgba(212,168,67,0.4);padding-bottom:0;">
+        <div class="tl-title">ClawdBot → OpenClaw 诞生</div>
+        <div class="tl-desc">「蹭流量」Claude，名字里藏着百年传承</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="quote" style="margin-top:18px;">
+    <p>「一只龙虾的爪子里，藏着香农 1948 年写下的那些 0 和 1。」</p>
+    <div class="attr">— 名字背后的故事</div>
+  </div>
+</div>
+
+<div id="nav"></div>
+<div id="counter"></div>
+<div id="progress"></div>
+</div></div>
+
+<script>
+  const slides = document.querySelectorAll('.slide');
+  const total = slides.length;
+  let cur = 0;
+
+  const nav = document.getElementById('nav');
+  for (let i = 0; i < total; i++) {
+    const d = document.createElement('div');
+    d.className = 'dot' + (i === 0 ? ' active' : '');
+    d.onclick = () => goTo(i);
+    nav.appendChild(d);
+  }
+
+  function goTo(idx) {
+    slides[cur].classList.remove('active');
+    cur = idx;
+    slides[cur].classList.add('active');
+    updateUI();
+  }
+  function go(delta) {
+    const next = Math.max(0, Math.min(total - 1, cur + delta));
+    if (next !== cur) goTo(next);
+  }
+  function updateUI() {
+    document.querySelectorAll('.dot').forEach((d,i) => d.classList.toggle('active', i === cur));
+    document.getElementById('counter').textContent = (cur+1) + ' / ' + total;
+    document.getElementById('progress').style.width = ((cur+1)/total*100) + '%';
+  }
+
+  document.addEventListener('keydown', e => {
+    if (['ArrowRight','ArrowDown',' '].includes(e.key)) { e.preventDefault(); go(1); }
+    if (['ArrowLeft','ArrowUp'].includes(e.key)) { e.preventDefault(); go(-1); }
+  });
+
+  let tx = 0;
+  document.getElementById('stage').addEventListener('touchstart', e => { tx = e.touches[0].clientX; }, {passive:true});
+  document.getElementById('stage').addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - tx;
+    if (Math.abs(dx) > 40) go(dx < 0 ? 1 : -1);
+  }, {passive:true});
+
+  document.getElementById('stage').addEventListener('click', e => {
+    if (e.target.closest('.dot')) return;
+    const rect = document.getElementById('stage').getBoundingClientRect();
+    go(e.clientX - rect.left > rect.width / 2 ? 1 : -1);
+  });
+
+  updateUI();
+</script>
+</body>
+</html>
