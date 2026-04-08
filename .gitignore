@@ -1,0 +1,17 @@
+# Environment
+.env
+
+# Dependencies
+node_modules/
+
+# PPT/project folders
+ppt/
+
+# Claude local config
+.claude/
+
+# macOS
+.DS_Store
+
+# Temp output
+*/tmp/
