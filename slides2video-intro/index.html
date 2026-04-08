@@ -8,17 +8,21 @@
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=Noto+Sans+SC:wght@300;400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <style>
 :root {
-  --bg:     #0a0c10;
-  --surf:   #111318;
-  --surf2:  #181c24;
-  --gold:   #f0c060;
-  --gold2:  #ffd980;
-  --jade:   #4ecfa0;
-  --amber:  #f08040;
-  --text:   #eef2f8;
-  --soft:   #9aa8c0;
-  --muted:  #4a5468;
-  --border: rgba(240,192,96,0.18);
+  --bg:     #050709;
+  --surf:   #0c0f14;
+  --surf2:  #111520;
+  --cyan:   #00e5ff;
+  --cyan2:  #80f0ff;
+  --green:  #00ff88;
+  --red:    #ff3c5a;
+  --text:   #e8f4ff;
+  --soft:   #7a9ab8;
+  --muted:  #334455;
+  --border: rgba(0,229,255,0.2);
+  --gold:   #00e5ff;   /* remap gold → cyan for all existing uses */
+  --gold2:  #80f0ff;
+  --jade:   #00ff88;
+  --amber:  #ff3c5a;
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body {
@@ -75,33 +79,33 @@ html, body {
   content: '';
   position: absolute; inset: 0;
   background-image:
-    linear-gradient(rgba(240,192,96,0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(240,192,96,0.03) 1px, transparent 1px);
-  background-size: 40px 40px;
+    linear-gradient(rgba(0,229,255,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,229,255,0.04) 1px, transparent 1px);
+  background-size: 36px 36px;
   pointer-events: none;
 }
 
 /* ── Typography ── */
 .label {
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 0.6rem; letter-spacing: 0.2em; text-transform: uppercase;
-  color: var(--gold); opacity: 0.7; margin-bottom: 10px;
+  font-size: 0.72rem; letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--gold); opacity: 0.8; margin-bottom: 12px;
 }
 h1 {
   font-family: 'Noto Serif SC', serif;
-  font-size: 2.2rem; font-weight: 700; line-height: 1.2;
+  font-size: 2.4rem; font-weight: 700; line-height: 1.2;
   color: var(--text); margin-bottom: 8px;
 }
-h1 span { color: var(--gold); }
+h1 span { color: var(--cyan); text-shadow: 0 0 20px rgba(0,229,255,0.6), 0 0 40px rgba(0,229,255,0.3); }
 h2 {
   font-family: 'Noto Serif SC', serif;
-  font-size: 1.55rem; font-weight: 600; line-height: 1.3;
-  color: var(--text); margin-bottom: 14px;
+  font-size: 1.9rem; font-weight: 600; line-height: 1.3;
+  color: var(--text); margin-bottom: 16px;
 }
 h2 span { color: var(--gold); }
 .sub {
-  font-size: 0.82rem; color: var(--soft); line-height: 1.7;
-  margin-bottom: 10px;
+  font-size: 1rem; color: var(--soft); line-height: 1.75;
+  margin-bottom: 12px;
 }
 .accent { color: var(--gold); font-weight: 500; }
 .jade   { color: var(--jade); }
@@ -111,72 +115,72 @@ h2 span { color: var(--gold); }
 .divider {
   width: 40px; height: 2px;
   background: linear-gradient(90deg, var(--gold), transparent);
-  margin: 14px 0;
+  margin: 16px 0;
 }
 
 /* ── Card ── */
 .card {
   background: var(--surf2);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 14px 16px;
-  margin-bottom: 10px;
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-bottom: 12px;
 }
 .card-title {
-  font-size: 0.78rem; font-weight: 700; color: var(--gold);
-  margin-bottom: 4px; letter-spacing: 0.05em;
+  font-size: 0.95rem; font-weight: 700; color: var(--gold);
+  margin-bottom: 6px; letter-spacing: 0.04em;
 }
-.card p { font-size: 0.78rem; color: var(--soft); line-height: 1.6; }
+.card p { font-size: 0.92rem; color: var(--soft); line-height: 1.65; }
 
 /* ── Step list ── */
-.steps { display: flex; flex-direction: column; gap: 10px; }
+.steps { display: flex; flex-direction: column; gap: 16px; }
 .step {
-  display: flex; gap: 12px; align-items: flex-start;
+  display: flex; gap: 14px; align-items: flex-start;
 }
 .step-num {
-  width: 24px; height: 24px; border-radius: 50%;
+  width: 30px; height: 30px; border-radius: 50%;
   background: var(--gold); color: var(--bg);
-  font-size: 0.72rem; font-weight: 700;
+  font-size: 0.85rem; font-weight: 700;
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0; margin-top: 1px;
 }
 .step-body { flex: 1; }
-.step-body strong { font-size: 0.82rem; color: var(--text); display: block; }
-.step-body span { font-size: 0.75rem; color: var(--soft); }
+.step-body strong { font-size: 1rem; color: var(--text); display: block; margin-bottom: 2px; }
+.step-body span { font-size: 0.88rem; color: var(--soft); }
 
 /* ── Code block ── */
 .code {
-  background: #080a0e;
-  border: 1px solid rgba(240,192,96,0.12);
-  border-radius: 8px;
-  padding: 12px 14px;
+  background: #050709;
+  border: 1px solid rgba(0,229,255,0.15);
+  border-radius: 10px;
+  padding: 14px 16px;
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 0.68rem; line-height: 1.7;
-  color: #b8c8e0;
-  margin-bottom: 10px;
+  font-size: 0.82rem; line-height: 1.8;
+  color: #b8cce0;
+  margin-bottom: 12px;
   overflow-x: auto;
 }
 .code .cm { color: var(--muted); }
-.code .kw { color: var(--gold); }
+.code .kw { color: var(--cyan); }
 .code .st { color: var(--jade); }
-.code .hl { color: var(--gold2); }
+.code .hl { color: var(--cyan2); }
 
 /* ── Big quote ── */
 .quote {
   border-left: 3px solid var(--gold);
-  padding: 10px 14px;
-  background: rgba(240,192,96,0.05);
-  border-radius: 0 8px 8px 0;
-  font-size: 0.82rem; color: var(--soft); line-height: 1.7;
+  padding: 12px 16px;
+  background: rgba(0,229,255,0.04);
+  border-radius: 0 10px 10px 0;
+  font-size: 0.98rem; color: var(--soft); line-height: 1.75;
   font-style: italic;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 
 /* ── Tag pill ── */
-.pills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .pill {
-  padding: 3px 10px; border-radius: 20px; font-size: 0.68rem;
-  border: 1px solid var(--border); color: var(--gold); background: rgba(240,192,96,0.07);
+  padding: 5px 14px; border-radius: 20px; font-size: 0.82rem;
+  border: 1px solid var(--border); color: var(--gold); background: rgba(0,229,255,0.06);
 }
 
 /* ── GitHub CTA on cover ── */
@@ -220,10 +224,10 @@ h2 span { color: var(--gold); }
 
 /* ── Glow orb ── */
 .orb {
-  position: absolute; border-radius: 50%; filter: blur(60px); pointer-events: none;
+  position: absolute; border-radius: 50%; filter: blur(70px); pointer-events: none;
 }
-.orb-gold { background: rgba(240,192,96,0.12); width: 180px; height: 180px; }
-.orb-jade { background: rgba(78,207,160,0.08); width: 140px; height: 140px; }
+.orb-gold { background: rgba(0,229,255,0.12); width: 200px; height: 200px; }
+.orb-jade { background: rgba(0,255,136,0.07); width: 160px; height: 160px; }
 </style>
 </head>
 <body>
@@ -329,83 +333,46 @@ h2 span { color: var(--gold); }
     <p class="sub" style="margin-top:4px;font-size:0.75rem;">这个项目只是一个开始——更多幻灯片转视频的方式会陆续加入。</p>
   </div>
 
-  <!-- ── 05 You only need ── -->
+  <!-- ── 05 你需要准备什么 ── -->
   <div class="slide" id="s5">
     <div class="label">使用方法</div>
-    <h2>你只需要<br/>准备<span>两件事</span></h2>
+    <h2>你只需要<br/>一个目录<br/>两个文件</h2>
     <div class="divider"></div>
-    <div class="card" style="margin-bottom:14px;">
-      <div class="card-title">① 创建一个目录，放入 HTML 版 PPT</div>
-      <p>HTML 版 PPT 可以直接让 AI Agent 帮你生成。<br/>MiniMax、Kimi、DeepSeek……随便哪个都能做，<br/>告诉它"帮我做一个 HTML 幻灯片"，复制粘贴保存为 <span style="color:var(--jade);font-family:'IBM Plex Mono',monospace;font-size:0.75rem;">index.html</span> 即可。</p>
-    </div>
-    <div class="card">
-      <div class="card-title">② 在同一目录下放 scripts.json</div>
-      <p>JSON 数组，每条字符串是一张幻灯片的解说词。<br/>同样可以让 AI 根据幻灯片内容自动生成。</p>
-    </div>
-    <div class="code" style="margin-top:12px;">
+    <div class="code">
 my-project/<br/>
 &nbsp;&nbsp;<span class="hl">index.html</span>&nbsp;&nbsp;&nbsp;<span class="cm"># HTML 幻灯片</span><br/>
-&nbsp;&nbsp;<span class="hl">scripts.json</span>&nbsp;<span class="cm"># 解说词</span>
+&nbsp;&nbsp;<span class="hl">scripts.json</span>&nbsp;<span class="cm"># 每页解说词</span>
     </div>
+    <p class="sub">就这两个文件，其他全自动。</p>
   </div>
 
-  <!-- ── 06 How it works ── -->
+  <!-- ── 06 AI 帮你做 PPT ── -->
   <div class="slide" id="s6">
-    <div class="label">原理</div>
-    <h2>三步生成<br/><span>视频</span></h2>
-    <div class="divider"></div>
-    <div class="steps">
-      <div class="step">
-        <div class="step-num">1</div>
-        <div class="step-body">
-          <strong>截图 — Playwright</strong>
-          <span>无头 Chromium 逐页截取 index.html，得到 slide_01.png …</span>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">2</div>
-        <div class="step-body">
-          <strong>配音 — 豆包 TTS</strong>
-          <span>按 scripts.json 调用豆包 V3 API，生成 PCM 音频</span>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">3</div>
-        <div class="step-body">
-          <strong>合成 — ffmpeg</strong>
-          <span>图片 + 音频编码为 MP4，PCM 直接拼接保证零间隙</span>
-        </div>
-      </div>
-    </div>
-    <div class="code" style="margin-top:12px;">
-<span class="cm"># 一条命令</span>
-<br/><span class="kw">node</span> generate-video.mjs <span class="st">ppt/my-project</span>
-    </div>
-  </div>
-
-  <!-- ── 07 Create PPT ── -->
-  <div class="slide" id="s7">
     <div class="label">Step 1 — HTML 幻灯片</div>
     <h2>让 <span>AI</span> 帮你<br/>做 PPT</h2>
     <div class="divider"></div>
-    <p class="sub">不用自己写 HTML。把你的内容发给任意 AI：</p>
-    <div class="pills" style="margin-bottom:12px;">
+    <p class="sub">不用自己写 HTML，发给任意 AI 让它生成：</p>
+    <div class="pills">
       <span class="pill">MiniMax</span>
       <span class="pill">Kimi</span>
       <span class="pill">DeepSeek</span>
       <span class="pill">Claude</span>
       <span class="pill">ChatGPT</span>
     </div>
-    <p class="sub" style="font-size:0.75rem;">让 AI 生成后，保存为 <span class="accent">index.html</span>，放入你的项目目录。<br/>确保每张幻灯片是 <code style="color:var(--jade);font-size:0.75rem;">.slide</code> div，并暴露 <span class="accent">window.goTo(i)</span>：</p>
+    <div class="divider"></div>
+    <p class="sub">生成后保存为 <span class="accent">index.html</span>，放入项目目录即可。</p>
+  </div>
+
+  <!-- ── 07 HTML 结构要求 ── -->
+  <div class="slide" id="s7">
+    <div class="label">Step 1 — 结构要求</div>
+    <h2>HTML<span> 结构</span></h2>
+    <div class="divider"></div>
+    <p class="sub">每张幻灯片是一个 <span class="accent">.slide</span> div，JS 暴露 <span class="accent">window.goTo(i)</span>：</p>
     <div class="code">
-<span class="cm">&lt;!-- 每张幻灯片 --&gt;</span><br/>
-<span class="kw">&lt;div</span> class=<span class="st">"slide active"</span><span class="kw">&gt;</span><br/>
-&nbsp;&nbsp;<span class="kw">&lt;h1&gt;</span>第一页标题<span class="kw">&lt;/h1&gt;</span><br/>
-&nbsp;&nbsp;<span class="kw">&lt;p&gt;</span>内容<span class="kw">&lt;/p&gt;</span><br/>
-<span class="kw">&lt;/div&gt;</span><br/>
-<span class="kw">&lt;div</span> class=<span class="st">"slide"</span><span class="kw">&gt;</span>...<span class="kw">&lt;/div&gt;</span>
+<span class="kw">&lt;div</span> class=<span class="st">"slide active"</span><span class="kw">&gt;</span>第一页<span class="kw">&lt;/div&gt;</span><br/>
+<span class="kw">&lt;div</span> class=<span class="st">"slide"</span><span class="kw">&gt;</span>第二页<span class="kw">&lt;/div&gt;</span>
     </div>
-    <p class="sub" style="font-size:0.75rem;">在 JS 中暴露 <span class="accent">window.goTo(i)</span> 供 Playwright 调用翻页。</p>
     <div class="code">
 <span class="kw">window</span>.goTo = <span class="kw">function</span>(i) {<br/>
 &nbsp;&nbsp;slides.forEach((s,j) =&gt;<br/>
@@ -414,50 +381,71 @@ my-project/<br/>
     </div>
   </div>
 
-  <!-- ── 08 Create scripts.json ── -->
+  <!-- ── 08 三步原理 ── -->
   <div class="slide" id="s8">
-    <div class="label">Step 2</div>
-    <h2>编写<span> scripts.json</span></h2>
+    <div class="label">原理</div>
+    <h2>三步生成<br/><span>视频</span></h2>
     <div class="divider"></div>
-    <p class="sub">在项目目录下创建 <span class="accent">scripts.json</span>，<br/>每个字符串对应一张幻灯片的解说词。</p>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <strong>截图 — Playwright</strong>
+          <span>无头 Chromium 逐页截取幻灯片</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <strong>配音 — 豆包 TTS</strong>
+          <span>按 scripts.json 生成 AI 配音</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <strong>合成 — ffmpeg</strong>
+          <span>图片 + 音频合成 MP4，零间隙</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 09 scripts.json ── -->
+  <div class="slide" id="s9">
+    <div class="label">Step 2 — 解说词</div>
+    <h2>编写<br/><span>scripts.json</span></h2>
+    <div class="divider"></div>
+    <p class="sub">每条字符串对应一张幻灯片：</p>
     <div class="code">
-<span class="cm">// 简单数组</span><br/>
 [<br/>
-&nbsp;&nbsp;<span class="st">"第一页的解说内容。"</span>,<br/>
-&nbsp;&nbsp;<span class="st">"第二页的解说内容。"</span>,<br/>
-&nbsp;&nbsp;<span class="st">"..."</span><br/>
+&nbsp;&nbsp;<span class="st">"第一页解说词。"</span>,<br/>
+&nbsp;&nbsp;<span class="st">"第二页解说词。"</span><br/>
 ]
     </div>
-    <p class="sub" style="font-size:0.75rem;">也可指定声音：</p>
+    <p class="sub">指定声音（可选）：</p>
     <div class="code">
 {<br/>
 &nbsp;&nbsp;<span class="hl">"voice"</span>: <span class="st">"zh_male_jieshuonansheng_mars_bigtts"</span>,<br/>
-&nbsp;&nbsp;<span class="hl">"scripts"</span>: [<span class="st">"..."</span>, <span class="st">"..."</span>]<br/>
+&nbsp;&nbsp;<span class="hl">"scripts"</span>: [<span class="st">"..."</span>]<br/>
 }
     </div>
-    <p class="sub" style="font-size:0.72rem;">查看所有声音：<span class="accent">node generate-video.mjs --list-voices</span></p>
   </div>
 
-  <!-- ── 09 Run ── -->
-  <div class="slide" id="s9">
-    <div class="label">Step 3</div>
-    <h2>运行<span> & 输出</span></h2>
+  <!-- ── 10 运行 ── -->
+  <div class="slide" id="s10">
+    <div class="label">Step 3 — 运行</div>
+    <h2>一条命令<br/><span>生成视频</span></h2>
     <div class="divider"></div>
-    <p class="sub">确保 <span class="accent">.env</span> 已配置豆包 API Key：</p>
     <div class="code">
-DOUBAO_APP_ID=<span class="st">your_app_id</span><br/>
-DOUBAO_ACCESS_TOKEN=<span class="st">your_token</span>
-    </div>
-    <p class="sub">运行：</p>
-    <div class="code">
-<span class="kw">node</span> generate-video.mjs <span class="st">ppt/my-project</span><br/><br/>
-<span class="cm"># 断点续跑</span><br/>
-<span class="kw">node</span> generate-video.mjs <span class="st">ppt/my-project</span> \<br/>
-&nbsp;&nbsp;--skip-screenshots<br/><br/>
+<span class="cm"># 生成视频</span><br/>
+<span class="kw">node</span> generate-video.mjs <span class="st">my-project</span><br/><br/>
 <span class="cm"># 查看所有声音</span><br/>
-<span class="kw">node</span> generate-video.mjs --list-voices 男
+<span class="kw">node</span> generate-video.mjs --list-voices<br/><br/>
+<span class="cm"># 断点续跑</span><br/>
+<span class="kw">node</span> generate-video.mjs <span class="st">my-project</span> --skip-screenshots
     </div>
-    <p class="sub" style="font-size:0.75rem;">输出：<span class="accent">ppt/my-project/output.mp4</span></p>
+    <p class="sub">输出：<span class="accent">my-project/output.mp4</span></p>
   </div>
 
   <!-- ── 10 Call to action ── -->
