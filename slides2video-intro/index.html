@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>slides2video — 幻灯片转视频</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=Noto+Sans+SC:wght@300;400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --bg:     #0a0c10;
+  --surf:   #111318;
+  --surf2:  #181c24;
+  --gold:   #f0c060;
+  --gold2:  #ffd980;
+  --jade:   #4ecfa0;
+  --amber:  #f08040;
+  --text:   #eef2f8;
+  --soft:   #9aa8c0;
+  --muted:  #4a5468;
+  --border: rgba(240,192,96,0.18);
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  width: 100%; height: 100%; overflow: hidden;
+  background: var(--bg); color: var(--text);
+  font-family: 'Noto Sans SC', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Stage: 9:16 centered ── */
+#stage {
+  position: fixed; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg);
+}
+.deck {
+  position: relative;
+  width: min(100vw, calc(100vh * 9 / 16));
+  height: min(100vh, calc(100vw * 16 / 9));
+  overflow: hidden;
+}
+
+/* ── Progress bar ── */
+#prog { position: absolute; top: 0; left: 0; right: 0; height: 2px; z-index: 100;
+  background: rgba(240,192,96,0.1); }
+#prog-fill { height: 100%;
+  background: linear-gradient(90deg, var(--gold), var(--jade));
+  transition: width 0.4s cubic-bezier(0.16,1,0.3,1); }
+
+/* ── Dots ── */
+#dots {
+  position: absolute; bottom: 18px; left: 0; right: 0;
+  display: flex; justify-content: center; gap: 6px; z-index: 100;
+}
+.dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--muted); transition: all 0.3s;
+  cursor: pointer;
+}
+.dot.active { background: var(--gold); transform: scale(1.4); }
+
+/* ── Slide base ── */
+.slide {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  padding: 40px 28px 50px;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.45s ease;
+}
+.slide.active { opacity: 1; pointer-events: all; }
+
+/* ── Background grid ── */
+.slide::before {
+  content: '';
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(rgba(240,192,96,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(240,192,96,0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+}
+
+/* ── Typography ── */
+.label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.6rem; letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--gold); opacity: 0.7; margin-bottom: 10px;
+}
+h1 {
+  font-family: 'Noto Serif SC', serif;
+  font-size: 2.2rem; font-weight: 700; line-height: 1.2;
+  color: var(--text); margin-bottom: 8px;
+}
+h1 span { color: var(--gold); }
+h2 {
+  font-family: 'Noto Serif SC', serif;
+  font-size: 1.55rem; font-weight: 600; line-height: 1.3;
+  color: var(--text); margin-bottom: 14px;
+}
+h2 span { color: var(--gold); }
+.sub {
+  font-size: 0.82rem; color: var(--soft); line-height: 1.7;
+  margin-bottom: 10px;
+}
+.accent { color: var(--gold); font-weight: 500; }
+.jade   { color: var(--jade); }
+.amber  { color: var(--amber); }
+
+/* ── Divider ── */
+.divider {
+  width: 40px; height: 2px;
+  background: linear-gradient(90deg, var(--gold), transparent);
+  margin: 14px 0;
+}
+
+/* ── Card ── */
+.card {
+  background: var(--surf2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+}
+.card-title {
+  font-size: 0.78rem; font-weight: 700; color: var(--gold);
+  margin-bottom: 4px; letter-spacing: 0.05em;
+}
+.card p { font-size: 0.78rem; color: var(--soft); line-height: 1.6; }
+
+/* ── Step list ── */
+.steps { display: flex; flex-direction: column; gap: 10px; }
+.step {
+  display: flex; gap: 12px; align-items: flex-start;
+}
+.step-num {
+  width: 24px; height: 24px; border-radius: 50%;
+  background: var(--gold); color: var(--bg);
+  font-size: 0.72rem; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; margin-top: 1px;
+}
+.step-body { flex: 1; }
+.step-body strong { font-size: 0.82rem; color: var(--text); display: block; }
+.step-body span { font-size: 0.75rem; color: var(--soft); }
+
+/* ── Code block ── */
+.code {
+  background: #080a0e;
+  border: 1px solid rgba(240,192,96,0.12);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.68rem; line-height: 1.7;
+  color: #b8c8e0;
+  margin-bottom: 10px;
+  overflow-x: auto;
+}
+.code .cm { color: var(--muted); }
+.code .kw { color: var(--gold); }
+.code .st { color: var(--jade); }
+.code .hl { color: var(--gold2); }
+
+/* ── Big quote ── */
+.quote {
+  border-left: 3px solid var(--gold);
+  padding: 10px 14px;
+  background: rgba(240,192,96,0.05);
+  border-radius: 0 8px 8px 0;
+  font-size: 0.82rem; color: var(--soft); line-height: 1.7;
+  font-style: italic;
+  margin-bottom: 12px;
+}
+
+/* ── Tag pill ── */
+.pills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.pill {
+  padding: 3px 10px; border-radius: 20px; font-size: 0.68rem;
+  border: 1px solid var(--border); color: var(--gold); background: rgba(240,192,96,0.07);
+}
+
+/* ── Bottom bar on cover ── */
+.cover-bar {
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  text-align: center;
+}
+.cover-bar .repo {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.75rem; color: var(--gold); margin-bottom: 6px;
+}
+.cover-bar .cta { font-size: 0.68rem; color: var(--soft); }
+
+/* ── Glow orb ── */
+.orb {
+  position: absolute; border-radius: 50%; filter: blur(60px); pointer-events: none;
+}
+.orb-gold { background: rgba(240,192,96,0.12); width: 180px; height: 180px; }
+.orb-jade { background: rgba(78,207,160,0.08); width: 140px; height: 140px; }
+</style>
+</head>
+<body>
+<div id="stage">
+<div class="deck" id="deck">
+  <div id="prog"><div id="prog-fill"></div></div>
+  <div id="dots"></div>
+
+  <!-- ── 01 Cover ── -->
+  <div class="slide active" id="s1">
+    <div class="orb orb-gold" style="top:-60px;right:-40px;"></div>
+    <div class="orb orb-jade" style="bottom:80px;left:-60px;"></div>
+    <div class="label">slides2video · 开源项目</div>
+    <h1>幻灯片<br/><span>转视频</span><br/>神器</h1>
+    <div class="divider"></div>
+    <p class="sub">程序员写的、给程序员用的<br/>HTML 幻灯片 → MP4 视频一键生成工具</p>
+    <div class="pills">
+      <span class="pill">开源</span>
+      <span class="pill">豆包 TTS</span>
+      <span class="pill">Playwright</span>
+      <span class="pill">ffmpeg</span>
+      <span class="pill">Node.js</span>
+    </div>
+    <div class="cover-bar">
+      <div class="repo">github.com/ruilisi/slides2video</div>
+      <div class="cta">Star · Fork · PR welcome — 欢迎点赞收藏贡献代码</div>
+    </div>
+  </div>
+
+  <!-- ── 02 Why the name ── -->
+  <div class="slide" id="s2">
+    <div class="label">为什么叫 slides2video？</div>
+    <h2>名字背后<br/>的<span>逻辑</span></h2>
+    <div class="divider"></div>
+    <div class="card">
+      <div class="card-title">slides</div>
+      <p>一张一张的幻灯片 — HTML、PPT、图片都算。<br/>本项目以 HTML 为核心，用浏览器截图精准还原每一帧。</p>
+    </div>
+    <div class="card">
+      <div class="card-title">2 (to)</div>
+      <p>"转换" — 技术上是截图 + TTS + ffmpeg 三步流水线，<br/>对用户来说就是一个命令。</p>
+    </div>
+    <div class="card">
+      <div class="card-title">video</div>
+      <p>带 AI 解说的 MP4，可以直接上传到任何平台。<br/>无需剪辑软件，无需录音。</p>
+    </div>
+  </div>
+
+  <!-- ── 03 The problem ── -->
+  <div class="slide" id="s3">
+    <div class="orb orb-amber" style="top:60px;right:-50px;background:rgba(240,128,64,0.1);width:160px;height:160px;"></div>
+    <div class="label">项目起源</div>
+    <h2>程序员的<br/><span>视频困境</span></h2>
+    <div class="divider"></div>
+    <div class="quote">
+      我是一个程序员，在历史上深受做视频的困扰，但又不得不做——因为开发的大量项目确实需要用视频来教大家如何使用。
+    </div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <strong>文档没人看</strong>
+          <span>信息快餐时代，用户没时间认真读文档</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <strong>视频费时费力</strong>
+          <span>录屏、剪辑、配音……一个视频半天没了</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <strong>项目多、视频需求多</strong>
+          <span>每次新项目都要重复这个痛苦</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 04 The insight ── -->
+  <div class="slide" id="s4">
+    <div class="label">信息快餐时代</div>
+    <h2>优雅的视频<br/>是最好的<span>文档</span></h2>
+    <div class="divider"></div>
+    <p class="sub">用视频来呈现如何使用软件或写代码，是目前效率最高的方式之一。</p>
+    <div class="card" style="margin-top:6px;">
+      <div class="card-title" style="color:var(--jade);">幻灯片转视频</div>
+      <p>是目前数量最多的一种视频形式之一。<br/>从 PPT 到 MP4，只差一个脚本的距离。</p>
+    </div>
+    <div class="quote" style="margin-top:10px;">
+      我坚定要找到一种能快速帮我生成视频的方案，这就有了今天的 slides2video 项目。
+    </div>
+    <p class="sub" style="margin-top:4px;font-size:0.75rem;">这个项目只是一个开始——更多幻灯片转视频的方式会陆续加入。</p>
+  </div>
+
+  <!-- ── 05 How it works ── -->
+  <div class="slide" id="s5">
+    <div class="label">原理</div>
+    <h2>三步生成<br/><span>视频</span></h2>
+    <div class="divider"></div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <strong>截图 — Playwright</strong>
+          <span>无头 Chromium 逐页截取 index.html，得到 slide_01.png …</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <strong>配音 — 豆包 TTS</strong>
+          <span>按 scripts.json 调用豆包 V3 API，生成 PCM 音频</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <strong>合成 — ffmpeg</strong>
+          <span>图片 + 音频编码为 MP4，PCM 直接拼接保证零间隙</span>
+        </div>
+      </div>
+    </div>
+    <div class="code" style="margin-top:12px;">
+<span class="cm"># 一条命令</span>
+<br/><span class="kw">node</span> generate-video.mjs <span class="st">ppt/my-project</span>
+    </div>
+  </div>
+
+  <!-- ── 06 Create PPT ── -->
+  <div class="slide" id="s6">
+    <div class="label">Step 1</div>
+    <h2>制作<span> PPT</span></h2>
+    <div class="divider"></div>
+    <p class="sub">创建 <span class="accent">ppt/my-project/index.html</span>，<br/>每张幻灯片是一个 <code style="color:var(--jade);font-size:0.78rem;">.slide</code> div，加 active 类控制显示。</p>
+    <div class="code">
+<span class="cm">&lt;!-- 每张幻灯片 --&gt;</span><br/>
+<span class="kw">&lt;div</span> class=<span class="st">"slide active"</span><span class="kw">&gt;</span><br/>
+&nbsp;&nbsp;<span class="kw">&lt;h1&gt;</span>第一页标题<span class="kw">&lt;/h1&gt;</span><br/>
+&nbsp;&nbsp;<span class="kw">&lt;p&gt;</span>内容<span class="kw">&lt;/p&gt;</span><br/>
+<span class="kw">&lt;/div&gt;</span><br/>
+<span class="kw">&lt;div</span> class=<span class="st">"slide"</span><span class="kw">&gt;</span>...<span class="kw">&lt;/div&gt;</span>
+    </div>
+    <p class="sub" style="font-size:0.75rem;">在 JS 中暴露 <span class="accent">window.goTo(i)</span> 供 Playwright 调用翻页。</p>
+    <div class="code">
+<span class="kw">window</span>.goTo = <span class="kw">function</span>(i) {<br/>
+&nbsp;&nbsp;slides.forEach((s,j) =&gt;<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;s.classList.toggle(<span class="st">'active'</span>, j===i));<br/>
+};
+    </div>
+  </div>
+
+  <!-- ── 07 Create scripts.json ── -->
+  <div class="slide" id="s7">
+    <div class="label">Step 2</div>
+    <h2>编写<span> scripts.json</span></h2>
+    <div class="divider"></div>
+    <p class="sub">在项目目录下创建 <span class="accent">scripts.json</span>，<br/>每个字符串对应一张幻灯片的解说词。</p>
+    <div class="code">
+<span class="cm">// 简单数组</span><br/>
+[<br/>
+&nbsp;&nbsp;<span class="st">"第一页的解说内容。"</span>,<br/>
+&nbsp;&nbsp;<span class="st">"第二页的解说内容。"</span>,<br/>
+&nbsp;&nbsp;<span class="st">"..."</span><br/>
+]
+    </div>
+    <p class="sub" style="font-size:0.75rem;">也可指定声音：</p>
+    <div class="code">
+{<br/>
+&nbsp;&nbsp;<span class="hl">"voice"</span>: <span class="st">"zh_male_jieshuonansheng_mars_bigtts"</span>,<br/>
+&nbsp;&nbsp;<span class="hl">"scripts"</span>: [<span class="st">"..."</span>, <span class="st">"..."</span>]<br/>
+}
+    </div>
+    <p class="sub" style="font-size:0.72rem;">查看所有声音：<span class="accent">node generate-video.mjs --list-voices</span></p>
+  </div>
+
+  <!-- ── 08 Run ── -->
+  <div class="slide" id="s8">
+    <div class="label">Step 3</div>
+    <h2>运行<span> & 输出</span></h2>
+    <div class="divider"></div>
+    <p class="sub">确保 <span class="accent">.env</span> 已配置豆包 API Key：</p>
+    <div class="code">
+DOUBAO_APP_ID=<span class="st">your_app_id</span><br/>
+DOUBAO_ACCESS_TOKEN=<span class="st">your_token</span>
+    </div>
+    <p class="sub">运行：</p>
+    <div class="code">
+<span class="kw">node</span> generate-video.mjs <span class="st">ppt/my-project</span><br/><br/>
+<span class="cm"># 断点续跑</span><br/>
+<span class="kw">node</span> generate-video.mjs <span class="st">ppt/my-project</span> \<br/>
+&nbsp;&nbsp;--skip-screenshots<br/><br/>
+<span class="cm"># 查看所有声音</span><br/>
+<span class="kw">node</span> generate-video.mjs --list-voices 男
+    </div>
+    <p class="sub" style="font-size:0.75rem;">输出：<span class="accent">ppt/my-project/output.mp4</span></p>
+  </div>
+
+  <!-- ── 09 Call to action ── -->
+  <div class="slide" id="s9">
+    <div class="orb orb-gold" style="bottom:-40px;right:-40px;width:200px;height:200px;opacity:0.8;"></div>
+    <div class="label">加入我们</div>
+    <h2>一起让<br/>视频制作<span>更简单</span></h2>
+    <div class="divider"></div>
+    <div class="quote">
+      希望更多视频制作爱好者，以及像我这样被视频制作困扰的理工科生，能把这个项目用起来，一起贡献代码。
+    </div>
+    <div class="card" style="margin-top:4px;">
+      <div class="card-title">现在支持</div>
+      <p>HTML 幻灯片 → MP4，豆包 TTS 配音，100+ 声音可选</p>
+    </div>
+    <div class="card">
+      <div class="card-title">接下来</div>
+      <p>更多幻灯片格式支持，更多 TTS 后端，批量生成……</p>
+    </div>
+    <div style="margin-top:12px;text-align:center;">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:0.72rem;color:var(--gold);">
+        github.com/ruilisi/slides2video
+      </div>
+      <div style="font-size:0.68rem;color:var(--muted);margin-top:4px;">Star · Fork · PR welcome</div>
+    </div>
+  </div>
+
+</div><!-- /deck -->
+</div><!-- /stage -->
+
+<script>
+const slides = Array.from(document.querySelectorAll('.slide'));
+const dots   = document.getElementById('dots');
+const fill   = document.getElementById('prog-fill');
+let cur = 0;
+
+// build dots
+slides.forEach((_, i) => {
+  const d = document.createElement('div');
+  d.className = 'dot' + (i === 0 ? ' active' : '');
+  d.onclick = () => goTo(i);
+  dots.appendChild(d);
+});
+
+function goTo(i) {
+  if (i < 0 || i >= slides.length) return;
+  slides[cur].classList.remove('active');
+  document.querySelectorAll('.dot')[cur].classList.remove('active');
+  cur = i;
+  slides[cur].classList.add('active');
+  document.querySelectorAll('.dot')[cur].classList.add('active');
+  fill.style.width = ((cur + 1) / slides.length * 100) + '%';
+}
+window.goTo = goTo;
+
+// keyboard
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') goTo(cur + 1);
+  if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   goTo(cur - 1);
+});
+
+// touch / click
+let tx = 0;
+document.addEventListener('touchstart', e => { tx = e.touches[0].clientX; });
+document.addEventListener('touchend',   e => {
+  const dx = e.changedTouches[0].clientX - tx;
+  if (Math.abs(dx) > 40) goTo(dx < 0 ? cur + 1 : cur - 1);
+});
+document.addEventListener('click', e => {
+  const w = document.getElementById('deck').offsetWidth;
+  goTo(e.clientX > w / 2 ? cur + 1 : cur - 1);
+});
+
+// init
+goTo(0);
+</script>
+</body>
+</html>
