@@ -27,6 +27,11 @@
  * Output:
  *   <project-dir>/output.mp4
  *
+ * Prerequisites:
+ *   Set DOUBAO_APP_ID and DOUBAO_ACCESS_TOKEN in .env
+ *   开通方式: 火山方舟 → 体验中心 → 语音模型 → 开通语音模型 (Doubao-语音合成)
+ *   控制台: https://console.volcengine.com/ark/region:ark+cn-beijing/openManagement?tab=TTS
+ *
  * Default voice: zh_male_shaonianzixin_moon_bigtts  (少年梓辛/Brayan)
  *
  * Available voices (run --list-voices to filter):
