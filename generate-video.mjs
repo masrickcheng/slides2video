@@ -9,6 +9,7 @@
  * Options:
  *   --voice <voice_type>     Override DOUBAO_VOICE from .env
  *   --skip-screenshots       Skip Phase 1 (reuse existing slide_NN.png in tmp/)
+ *   --skip-images            Alias for --skip-screenshots
  *   --skip-audio             Skip Phase 2 (reuse existing slide_NN.pcm in tmp/)
  *   --list-voices [keyword]  Print voice catalog and exit (optional keyword filter)
  *
@@ -370,7 +371,7 @@ if (args[0] === '--list-voices') {
 
 const projectArg = args.find(a => !a.startsWith('--'));
 if (!projectArg) {
-  console.error('Usage: node generate-video.mjs <project-dir> [--voice <voice>] [--screenshots-only] [--skip-screenshots] [--skip-audio] [--concat-only]');
+  console.error('Usage: node generate-video.mjs <project-dir> [--voice <voice>] [--screenshots-only] [--skip-screenshots] [--skip-images] [--skip-audio] [--concat-only]');
   console.error('       node generate-video.mjs --list-voices [keyword]');
   process.exit(1);
 }
@@ -381,7 +382,7 @@ const OUTPUT    = path.join(PROJECT, 'output.mp4');
 const HTML      = path.join(PROJECT, 'index.html');
 
 const SCREENSHOTS_ONLY = args.includes('--screenshots-only');
-const SKIP_SCREENSHOTS = args.includes('--skip-screenshots') || args.includes('--concat-only');
+const SKIP_SCREENSHOTS = args.includes('--skip-screenshots') || args.includes('--skip-images') || args.includes('--concat-only');
 const SKIP_AUDIO       = args.includes('--skip-audio')       || args.includes('--concat-only') || SCREENSHOTS_ONLY;
 const voiceIdx = args.indexOf('--voice');
 const VOICE_ARG = voiceIdx !== -1 ? args[voiceIdx + 1] : null;
