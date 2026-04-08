@@ -296,8 +296,28 @@ h2 span { color: var(--gold); }
     <p class="sub" style="margin-top:4px;font-size:0.75rem;">这个项目只是一个开始——更多幻灯片转视频的方式会陆续加入。</p>
   </div>
 
-  <!-- ── 05 How it works ── -->
+  <!-- ── 05 You only need ── -->
   <div class="slide" id="s5">
+    <div class="label">使用方法</div>
+    <h2>你只需要<br/>准备<span>两件事</span></h2>
+    <div class="divider"></div>
+    <div class="card" style="margin-bottom:14px;">
+      <div class="card-title">① 创建一个目录，放入 HTML 版 PPT</div>
+      <p>HTML 版 PPT 可以直接让 AI Agent 帮你生成。<br/>MiniMax、Kimi、DeepSeek……随便哪个都能做，<br/>告诉它"帮我做一个 HTML 幻灯片"，复制粘贴保存为 <span style="color:var(--jade);font-family:'IBM Plex Mono',monospace;font-size:0.75rem;">index.html</span> 即可。</p>
+    </div>
+    <div class="card">
+      <div class="card-title">② 在同一目录下放 scripts.json</div>
+      <p>JSON 数组，每条字符串是一张幻灯片的解说词。<br/>同样可以让 AI 根据幻灯片内容自动生成。</p>
+    </div>
+    <div class="code" style="margin-top:12px;">
+my-project/<br/>
+&nbsp;&nbsp;<span class="hl">index.html</span>&nbsp;&nbsp;&nbsp;<span class="cm"># HTML 幻灯片</span><br/>
+&nbsp;&nbsp;<span class="hl">scripts.json</span>&nbsp;<span class="cm"># 解说词</span>
+    </div>
+  </div>
+
+  <!-- ── 06 How it works ── -->
+  <div class="slide" id="s6">
     <div class="label">原理</div>
     <h2>三步生成<br/><span>视频</span></h2>
     <div class="divider"></div>
@@ -330,12 +350,20 @@ h2 span { color: var(--gold); }
     </div>
   </div>
 
-  <!-- ── 06 Create PPT ── -->
-  <div class="slide" id="s6">
-    <div class="label">Step 1</div>
-    <h2>制作<span> PPT</span></h2>
+  <!-- ── 07 Create PPT ── -->
+  <div class="slide" id="s7">
+    <div class="label">Step 1 — HTML 幻灯片</div>
+    <h2>让 <span>AI</span> 帮你<br/>做 PPT</h2>
     <div class="divider"></div>
-    <p class="sub">创建 <span class="accent">ppt/my-project/index.html</span>，<br/>每张幻灯片是一个 <code style="color:var(--jade);font-size:0.78rem;">.slide</code> div，加 active 类控制显示。</p>
+    <p class="sub">不用自己写 HTML。把你的内容发给任意 AI：</p>
+    <div class="pills" style="margin-bottom:12px;">
+      <span class="pill">MiniMax</span>
+      <span class="pill">Kimi</span>
+      <span class="pill">DeepSeek</span>
+      <span class="pill">Claude</span>
+      <span class="pill">ChatGPT</span>
+    </div>
+    <p class="sub" style="font-size:0.75rem;">让 AI 生成后，保存为 <span class="accent">index.html</span>，放入你的项目目录。<br/>确保每张幻灯片是 <code style="color:var(--jade);font-size:0.75rem;">.slide</code> div，并暴露 <span class="accent">window.goTo(i)</span>：</p>
     <div class="code">
 <span class="cm">&lt;!-- 每张幻灯片 --&gt;</span><br/>
 <span class="kw">&lt;div</span> class=<span class="st">"slide active"</span><span class="kw">&gt;</span><br/>
@@ -353,8 +381,8 @@ h2 span { color: var(--gold); }
     </div>
   </div>
 
-  <!-- ── 07 Create scripts.json ── -->
-  <div class="slide" id="s7">
+  <!-- ── 08 Create scripts.json ── -->
+  <div class="slide" id="s8">
     <div class="label">Step 2</div>
     <h2>编写<span> scripts.json</span></h2>
     <div class="divider"></div>
@@ -377,8 +405,8 @@ h2 span { color: var(--gold); }
     <p class="sub" style="font-size:0.72rem;">查看所有声音：<span class="accent">node generate-video.mjs --list-voices</span></p>
   </div>
 
-  <!-- ── 08 Run ── -->
-  <div class="slide" id="s8">
+  <!-- ── 09 Run ── -->
+  <div class="slide" id="s9">
     <div class="label">Step 3</div>
     <h2>运行<span> & 输出</span></h2>
     <div class="divider"></div>
@@ -399,8 +427,8 @@ DOUBAO_ACCESS_TOKEN=<span class="st">your_token</span>
     <p class="sub" style="font-size:0.75rem;">输出：<span class="accent">ppt/my-project/output.mp4</span></p>
   </div>
 
-  <!-- ── 09 Call to action ── -->
-  <div class="slide" id="s9">
+  <!-- ── 10 Call to action ── -->
+  <div class="slide" id="s10">
     <div class="orb orb-gold" style="bottom:-40px;right:-40px;width:200px;height:200px;opacity:0.8;"></div>
     <div class="label">加入我们</div>
     <h2>一起让<br/>视频制作<span>更简单</span></h2>
