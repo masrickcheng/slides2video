@@ -64,7 +64,7 @@ html, body {
 .slide {
   position: absolute; inset: 0;
   display: flex; flex-direction: column; justify-content: center;
-  padding: 40px 28px 50px;
+  padding: 44px 28px;
   opacity: 0; pointer-events: none;
   transition: opacity 0.45s ease;
 }
@@ -181,8 +181,8 @@ h2 span { color: var(--gold); }
 
 /* ── Bottom bar on cover ── */
 .cover-bar {
-  margin-top: auto;
   padding-top: 16px;
+  margin-top: 20px;
   border-top: 1px solid var(--border);
   text-align: center;
 }
@@ -207,7 +207,7 @@ h2 span { color: var(--gold); }
   <div id="dots"></div>
 
   <!-- ── 01 Cover ── -->
-  <div class="slide active" id="s1" style="justify-content:space-between;">
+  <div class="slide active" id="s1">
     <div class="orb orb-gold" style="top:-60px;right:-40px;"></div>
     <div class="orb orb-jade" style="bottom:80px;left:-60px;"></div>
     <div class="label">slides2video · 开源项目</div>
