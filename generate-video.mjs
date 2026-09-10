@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
- * generate-video.mjs — Generic PPT-to-MP4 converter with 豆包 TTS narration.
+ * generate-video.mjs — Generic PPT-to-MP4 converter with TTS narration.
  *
  * Usage:
  *   node generate-video.mjs <project-dir> [options]
  *   node generate-video.mjs --list-voices [keyword]   List all available voices
  *
  * Options:
- *   --voice <voice_type>     Override DOUBAO_VOICE from .env
+ *   --voice <voice_name>     Override voice from scripts.json/.env
  *   --skip-screenshots       Skip Phase 1 (reuse existing slide_NN.png in tmp/)
  *   --skip-images            Alias for --skip-screenshots
  *   --skip-audio             Skip Phase 2 (reuse existing slide_NN.pcm in tmp/)
@@ -23,17 +23,18 @@
  *     ["Slide 1 narration.", "Slide 2 narration.", ...]
  *
  *   With voice override:
- *     { "voice": "zh_male_shaonianzixin_moon_bigtts", "scripts": ["...", ...] }
+ *     { "voice": "zh-CN-XiaoxiaoNeural", "scripts": ["...", ...] }
  *
  * Output:
  *   <project-dir>/output.mp4
  *
- * Prerequisites:
+ * Prerequisites for doubao engine:
  *   Set DOUBAO_APP_ID and DOUBAO_ACCESS_TOKEN in .env
  *   开通方式: 火山方舟 → 体验中心 → 语音模型 → 开通语音模型 (Doubao-语音合成)
  *   控制台: https://console.volcengine.com/ark/region:ark+cn-beijing/openManagement?tab=TTS
  *
- * Default voice: zh_male_shaonianzixin_moon_bigtts  (少年梓辛/Brayan)
+ * Default engine: edge_tts
+ * Default voice: zh-CN-XiaoxiaoNeural
  *
  * Available voices (run --list-voices to filter):
  *
@@ -153,6 +154,9 @@
 // model: 2.0 = uranus_bigtts, 1.0 = moon_bigtts/mars_bigtts
 
 const VOICE_CATALOG = [
+  // ── Edge TTS ───────────────────────────────────────────────────────────────
+  { id: 'zh-CN-XiaoxiaoNeural',                         name: '晓晓',            lang: '中文',  scene: '通用',   model: 'edge_tts', desc: '默认声音' },
+
   // ── 2.0 通用声音 (uranus_bigtts) ──────────────────────────────────────────
   { id: 'zh_female_vv_uranus_bigtts',              name: 'Vivi 2.0',       lang: '中/日/印尼/西语+四川/陕西/东北',  scene: '通用',   model: '2.0', desc: '情感变化、指令遵循、ASMR，多语种+方言' },
   { id: 'zh_female_xiaohe_uranus_bigtts',          name: '小何 2.0',       lang: '中文',  scene: '通用',   model: '2.0', desc: '情感变化、指令遵循、ASMR' },
@@ -332,8 +336,12 @@ import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { MsEdgeTTS, OUTPUT_FORMAT } from 'msedge-tts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const DEFAULT_ENGINE = 'edge_tts';
+const DEFAULT_EDGE_VOICE = 'zh-CN-XiaoxiaoNeural';
+const DEFAULT_DOUBAO_VOICE = 'zh_male_shaonianzixin_moon_bigtts';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -358,6 +366,7 @@ if (args[0] === '--list-voices') {
         v.name.toLowerCase().includes(keyword) ||
         v.lang.toLowerCase().includes(keyword) ||
         v.scene.toLowerCase().includes(keyword) ||
+        v.model.toLowerCase().includes(keyword) ||
         v.desc.toLowerCase().includes(keyword))
     : VOICE_CATALOG;
   console.log(`\n${'ID'.padEnd(55)} ${'名称'.padEnd(22)} ${'语言'.padEnd(18)} ${'场景'.padEnd(10)} ${'版本'.padEnd(5)} 说明`);
@@ -410,9 +419,33 @@ function loadScripts() {
 }
 
 const { scripts: SCRIPTS, voice: scriptVoice } = loadScripts();
-const VOICE = VOICE_ARG ?? scriptVoice ?? process.env.DOUBAO_VOICE ?? 'zh_male_shaonianzixin_moon_bigtts';
+const TTS_ENGINE = (process.env.TTS_ENGINE ?? DEFAULT_ENGINE).toLowerCase();
+if (!['edge_tts', 'doubao'].includes(TTS_ENGINE)) {
+  console.error(`Error: unsupported TTS engine "${TTS_ENGINE}". Use edge_tts or doubao.`);
+  process.exit(1);
+}
+function isDoubaoVoice(voice) {
+  return !!voice && (
+    voice.includes('_bigtts') ||
+    voice.startsWith('ICL_') ||
+    voice.startsWith('saturn_')
+  );
+}
+
+function voiceForEngine() {
+  if (VOICE_ARG) return VOICE_ARG;
+  if (TTS_ENGINE === 'doubao') {
+    return scriptVoice ?? process.env.DOUBAO_VOICE ?? DEFAULT_DOUBAO_VOICE;
+  }
+  return !isDoubaoVoice(scriptVoice)
+    ? scriptVoice ?? process.env.EDGE_TTS_VOICE ?? DEFAULT_EDGE_VOICE
+    : process.env.EDGE_TTS_VOICE ?? DEFAULT_EDGE_VOICE;
+}
+
+const VOICE = voiceForEngine();
 const TOTAL = SCRIPTS.length;
 const pad   = n => String(n).padStart(2, '0');
+const AUDIO_EXT = TTS_ENGINE === 'doubao' ? 'pcm' : 'mp3';
 
 // ── Phase 1: Screenshots ──────────────────────────────────────────────────────
 
@@ -463,7 +496,23 @@ async function captureSlides() {
   console.log('  Done.\n');
 }
 
-// ── Phase 2: TTS Audio (豆包 V3 HTTP Chunked) ─────────────────────────────────
+// ── Phase 2: TTS Audio ───────────────────────────────────────────────────────
+
+async function ttsEdge(text) {
+  const tts = new MsEdgeTTS();
+  await tts.setMetadata(VOICE, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
+  const { audioStream } = tts.toStream(text);
+  const chunks = [];
+  try {
+    for await (const chunk of audioStream) {
+      chunks.push(Buffer.from(chunk));
+    }
+  } finally {
+    tts.close();
+  }
+  if (chunks.length === 0) throw new Error('msedge-tts: no audio received');
+  return Buffer.concat(chunks);
+}
 
 async function ttsDoubao(text) {
   // Model 1.0 voices (_moon_bigtts)    → seed-tts-1.0
@@ -527,10 +576,13 @@ async function ttsDoubao(text) {
 }
 
 async function generateAudio() {
-  console.log('🔊 Phase 2: Generating TTS audio via 豆包...');
+  const label = TTS_ENGINE === 'doubao' ? '豆包' : 'Edge TTS';
+  console.log(`🔊 Phase 2: Generating TTS audio via ${label}...`);
   for (let i = 0; i < TOTAL; i++) {
-    const file = path.join(TMP, `slide_${pad(i + 1)}.pcm`);
-    const buf  = await ttsDoubao(SCRIPTS[i]);
+    const file = path.join(TMP, `slide_${pad(i + 1)}.${AUDIO_EXT}`);
+    const buf  = TTS_ENGINE === 'doubao'
+      ? await ttsDoubao(SCRIPTS[i])
+      : await ttsEdge(SCRIPTS[i]);
     fs.writeFileSync(file, buf);
     console.log(`  audio ${pad(i + 1)}/${TOTAL} → ${path.basename(file)}`);
   }
@@ -539,25 +591,35 @@ async function generateAudio() {
 
 // ── Phase 3+4: Build + concat via filter_complex (frame-perfect A/V sync) ─────
 //
-// Each slide's video duration is set to the exact PCM duration computed from
-// file size (bytes / (sampleRate * 2)).  A single ffmpeg pass feeds all images
-// and PCM files simultaneously through the concat filter, so there is no
-// intermediate AAC encoding, no resample drift, and no per-clip quantisation
-// error.  This is the only approach that guarantees sample-accurate sync.
+// Each slide's video duration is set to its audio duration. A single ffmpeg pass
+// feeds all images and audio files through the concat filter, avoiding per-clip
+// AAC concatenation gaps.
+
+function audioPath(i) {
+  return path.join(TMP, `slide_${pad(i + 1)}.${AUDIO_EXT}`);
+}
+
+function audioDuration(file) {
+  if (TTS_ENGINE === 'doubao') return fs.statSync(file).size / (24000 * 2);
+  return Number(execSync(
+    `ffprobe -v error -show_entries format=duration -of default=nk=1:nw=1 "${file}"`,
+    { encoding: 'utf8' }
+  ).trim());
+}
 
 function buildAndConcat() {
   console.log('🎬 Phase 3+4: Building video via filter_complex concat...');
 
-  // Exact duration per slide (s16le 24kHz mono → bytes / 48000 bytes/sec)
   const durations = Array.from({ length: TOTAL }, (_, i) => {
-    const pcm = path.join(TMP, `slide_${pad(i + 1)}.pcm`);
-    return fs.statSync(pcm).size / (24000 * 2);
+    return audioDuration(audioPath(i));
   });
 
-  // Build input args: pairs of (image, pcm) for each slide
+  // Build input args: pairs of (image, audio) for each slide
   const inputs = durations.flatMap((dur, i) => [
     `-loop 1 -t ${dur.toFixed(6)} -r 25 -i "${path.join(TMP, `slide_${pad(i + 1)}.png`)}"`,
-    `-f s16le -ar 24000 -ac 1 -i "${path.join(TMP, `slide_${pad(i + 1)}.pcm`)}"`,
+    TTS_ENGINE === 'doubao'
+      ? `-f s16le -ar 24000 -ac 1 -i "${audioPath(i)}"`
+      : `-i "${audioPath(i)}"`,
   ]);
 
   // filter_complex: interleave video+audio streams into concat
@@ -584,8 +646,8 @@ function buildAndConcat() {
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main() {
-  if (!process.env.DOUBAO_APP_ID || !process.env.DOUBAO_ACCESS_TOKEN) {
-    console.error('Error: DOUBAO_APP_ID and DOUBAO_ACCESS_TOKEN must be set in ppt/.env');
+  if (!SKIP_AUDIO && TTS_ENGINE === 'doubao' && (!process.env.DOUBAO_APP_ID || !process.env.DOUBAO_ACCESS_TOKEN)) {
+    console.error('Error: DOUBAO_APP_ID and DOUBAO_ACCESS_TOKEN must be set in .env');
     process.exit(1);
   }
 
@@ -596,6 +658,7 @@ async function main() {
 
   console.log(`Project : ${PROJECT}`);
   console.log(`Slides  : ${TOTAL}`);
+  console.log(`Engine  : ${TTS_ENGINE}`);
   console.log(`Voice   : ${VOICE}\n`);
 
   // Wipe tmp only on a full run; preserve it when skipping phases
