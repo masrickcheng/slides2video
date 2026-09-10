@@ -340,7 +340,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Auto-load .env from ppt/
 const envPath = path.join(__dirname, '.env');
 if (fs.existsSync(envPath)) {
-  for (const line of fs.readFileSync(envPath, 'utf8').split('\n')) {
+  for (const line of fs.readFileSync(envPath, 'utf8').split(/\r?\n/)) {
     const m = line.match(/^([A-Z_]+)=(.*)$/);
     if (m) process.env[m[1]] ??= m[2];
   }
