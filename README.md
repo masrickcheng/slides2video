@@ -1,6 +1,6 @@
 # PPT Video Generator
 
-Converts an HTML slide deck (or pre-rendered PNG images) into a single MP4 video with AI-narrated voiceover. Edge TTS is the default engine; 豆包 TTS is also supported.
+Converts an HTML slide deck, a PowerPoint `.pptx`, or pre-rendered PNG images into a single MP4 video with AI-narrated voiceover. Edge TTS is the default engine; 豆包 TTS is also supported.
 
 ## Prerequisites
 
@@ -9,6 +9,21 @@ brew install ffmpeg
 npm install
 npx playwright install chromium      # only needed if using Playwright capture
 ```
+
+For PPTX input on Windows, installed Microsoft PowerPoint is used first. If PowerPoint is unavailable, or on macOS, install LibreOffice. Poppler is recommended for higher-quality PDF rendering in the LibreOffice fallback path; if `pdftoppm` is unavailable, the script tries ffmpeg as a fallback.
+
+macOS:
+
+```bash
+brew install --cask libreoffice
+brew install poppler
+```
+
+Windows:
+
+- Install Microsoft PowerPoint, or install LibreOffice from https://www.libreoffice.org/
+- Install ffmpeg and make `ffmpeg` available on PATH
+- Optional but recommended for LibreOffice fallback: install Poppler and make `pdftoppm` available on PATH
 
 ## TTS Engines
 
@@ -42,13 +57,14 @@ DOUBAO_VOICE=zh_male_shaonianzixin_moon_bigtts   # optional, this is the default
 ## Usage
 
 ```bash
-node generate-video.mjs <project-dir> [options]
+node generate-video.mjs <project-dir|deck.pptx> [options]
 ```
 
 Examples:
 
 ```bash
 node generate-video.mjs ppt/my-project
+node generate-video.mjs ppt/my-project/deck.pptx
 node generate-video.mjs ppt/my-project --voice zh_male_yuanboxiaoshu_moon_bigtts
 node generate-video.mjs --list-voices
 node generate-video.mjs --list-voices 男
@@ -74,6 +90,7 @@ node generate-video.mjs --list-voices 男
     my-project/
       scripts.json        ← narration scripts (required)
       index.html          ← slide deck (optional, for Playwright capture)
+      deck.pptx           ← slide deck (optional, for PPTX capture)
       slide_01.png        ← pre-rendered images (optional, skips Playwright)
       slide_02.png
       tmp/                ← intermediate files (auto-created, git-ignored)
@@ -106,6 +123,15 @@ Images are resolved in this order:
 
 1. **Pre-rendered PNGs** — if `slide_01.png … slide_NN.png` all exist in the project dir, they are used directly (no Playwright needed).
 2. **Playwright capture** — if any PNG is missing and `index.html` is present, the script launches headless Chromium, navigates to the file, and calls `window.goTo(i)` to advance slides. Viewport: `390 × 844`.
+3. **PPTX capture** — if no complete PNG set or `index.html` exists, the script looks for a single `.pptx`. On Windows it exports PNGs directly with Microsoft PowerPoint first; otherwise it converts the PPTX to PDF with LibreOffice, then renders each page to `tmp/slide_NN.png`. If multiple `.pptx` files exist, pass the intended file explicitly.
+
+You can also pass a PPTX file directly:
+
+```bash
+node generate-video.mjs ppt/my-project/deck.pptx
+```
+
+PPTX slide count must match the number of scripts. PPTX input is rendered as landscape `1920 × 1080` images by default.
 
 For Playwright capture, add this helper to your `index.html`:
 
@@ -125,10 +151,9 @@ window.goTo = function(i) {
 
 | Phase | Description |
 |---|---|
-| 1 | Capture or copy slide PNGs → `tmp/slide_NN.png` |
+| 1 | Capture/copy HTML, PPTX, or pre-rendered PNG slides → `tmp/slide_NN.png` |
 | 2 | Generate TTS audio → Edge TTS writes `tmp/slide_NN.mp3`; 豆包 writes `tmp/slide_NN.pcm` |
-| 3 | Encode per-slide MP4 clips (libx264 + AAC) → `tmp/clip_NN.mp4` |
-| 4 | Concatenate video streams (copy) + binary-concat PCM audio → final mux → `output.mp4` |
+| 3+4 | Build one ffmpeg concat graph from all slide images and audio files → `output.mp4` |
 
 The gapless audio technique (Phase 4) extracts audio from each clip as raw PCM at 44.1 kHz, binary-concatenates them, then encodes AAC once in the final mux — avoiding the ~23 ms encoder-delay gap that would appear if AAC streams were naively concatenated.
 

@@ -3,7 +3,7 @@
  * generate-video.mjs — Generic PPT-to-MP4 converter with TTS narration.
  *
  * Usage:
- *   node generate-video.mjs <project-dir> [options]
+ *   node generate-video.mjs <project-dir|deck.pptx> [options]
  *   node generate-video.mjs --list-voices [keyword]   List all available voices
  *
  * Options:
@@ -15,8 +15,9 @@
  *
  * Inputs (inside <project-dir>):
  *   scripts.json             Narration scripts — see format below
- *   slide_01.png …           Pre-rendered slide images (optional; if absent and
- *                            index.html exists, Playwright captures them)
+ *   slide_01.png …           Pre-rendered slide images (optional)
+ *   index.html               HTML slide deck (optional; Playwright captures it)
+ *   *.pptx                   PowerPoint slide deck (optional; PowerPoint/LibreOffice captures it)
  *
  * scripts.json format:
  *   Simple array:
@@ -332,7 +333,7 @@ const VOICE_CATALOG = [
   { id: 'saturn_zh_female_reqingaina_cs_tob',      name: '热情艾娜 2.0',    lang: '中文',  scene: '客服',   model: '2.0', desc: '指令遵循' },
 ];
 
-import { execSync } from 'child_process';
+import { execFileSync, execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -378,23 +379,74 @@ if (args[0] === '--list-voices') {
   process.exit(0);
 }
 
-const projectArg = args.find(a => !a.startsWith('--'));
+function getOptionValue(flag) {
+  const idx = args.indexOf(flag);
+  return idx !== -1 ? args[idx + 1] : null;
+}
+
+function getProjectArg() {
+  const flagsWithValues = new Set(['--voice']);
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (flagsWithValues.has(arg)) {
+      i++;
+      continue;
+    }
+    if (!arg.startsWith('--')) return arg;
+  }
+  return null;
+}
+
+const projectArg = getProjectArg();
 if (!projectArg) {
-  console.error('Usage: node generate-video.mjs <project-dir> [--voice <voice>] [--screenshots-only] [--skip-screenshots] [--skip-images] [--skip-audio] [--concat-only]');
+  console.error('Usage: node generate-video.mjs <project-dir|deck.pptx> [--voice <voice>] [--screenshots-only] [--skip-screenshots] [--skip-images] [--skip-audio] [--concat-only]');
   console.error('       node generate-video.mjs --list-voices [keyword]');
   process.exit(1);
 }
 
-const PROJECT   = path.resolve(__dirname, projectArg);
-const TMP       = path.join(PROJECT, 'tmp');
-const OUTPUT    = path.join(PROJECT, 'output.mp4');
-const HTML      = path.join(PROJECT, 'index.html');
-
 const SCREENSHOTS_ONLY = args.includes('--screenshots-only');
 const SKIP_SCREENSHOTS = args.includes('--skip-screenshots') || args.includes('--skip-images') || args.includes('--concat-only');
 const SKIP_AUDIO       = args.includes('--skip-audio')       || args.includes('--concat-only') || SCREENSHOTS_ONLY;
-const voiceIdx = args.indexOf('--voice');
-const VOICE_ARG = voiceIdx !== -1 ? args[voiceIdx + 1] : null;
+const VOICE_ARG = getOptionValue('--voice');
+const HTML_VIEWPORT_WIDTH = 390;
+const HTML_VIEWPORT_HEIGHT = 844;
+const PPTX_IMAGE_WIDTH = 1920;
+const PPTX_IMAGE_HEIGHT = 1080;
+
+function resolveInput(inputArg) {
+  const inputPath = path.resolve(__dirname, inputArg);
+  const ext = path.extname(inputPath).toLowerCase();
+
+  if (ext === '.pptx') {
+    return {
+      project: path.dirname(inputPath),
+      html: null,
+      pptx: inputPath,
+    };
+  }
+
+  return {
+    project: inputPath,
+    html: path.join(inputPath, 'index.html'),
+    pptx: null,
+  };
+}
+
+const INPUT     = resolveInput(projectArg);
+const PROJECT   = INPUT.project;
+const TMP       = path.join(PROJECT, 'tmp');
+const OUTPUT    = path.join(PROJECT, 'output.mp4');
+const HTML      = INPUT.html;
+let PPTX        = INPUT.pptx;
+
+if (!fs.existsSync(PROJECT)) {
+  console.error(`Error: project directory not found: ${PROJECT}`);
+  process.exit(1);
+}
+if (PPTX && !fs.existsSync(PPTX)) {
+  console.error(`Error: PPTX file not found: ${PPTX}`);
+  process.exit(1);
+}
 
 // ── Load scripts ──────────────────────────────────────────────────────────────
 
@@ -447,40 +499,90 @@ const TOTAL = SCRIPTS.length;
 const pad   = n => String(n).padStart(2, '0');
 const AUDIO_EXT = TTS_ENGINE === 'doubao' ? 'pcm' : 'mp3';
 
+// ── External tools ────────────────────────────────────────────────────────────
+
+function tryExec(command, cmdArgs) {
+  try {
+    execFileSync(command, cmdArgs, { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function findFirstWorking(candidates, versionArgs = ['--version']) {
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate) || !path.isAbsolute(candidate)) {
+      if (tryExec(candidate, versionArgs)) return candidate;
+    }
+  }
+  return null;
+}
+
+function findLibreOffice() {
+  const candidates = process.platform === 'win32'
+    ? [
+        'soffice',
+        'libreoffice',
+        'C:\\Program Files\\LibreOffice\\program\\soffice.exe',
+        'C:\\Program Files (x86)\\LibreOffice\\program\\soffice.exe',
+      ]
+    : [
+        'soffice',
+        'libreoffice',
+        '/Applications/LibreOffice.app/Contents/MacOS/soffice',
+      ];
+  return findFirstWorking(candidates);
+}
+
+function findPdfToPpm() {
+  return findFirstWorking(['pdftoppm']);
+}
+
+function findFfmpeg() {
+  return findFirstWorking(['ffmpeg']);
+}
+
+function psQuote(value) {
+  return `'${String(value).replace(/'/g, "''")}'`;
+}
+
+function findPowerPointPowerShell() {
+  const x86PowerPoint = 'C:\\Program Files (x86)\\Microsoft Office\\root\\Office16\\POWERPNT.EXE';
+  const x86PowerShell = 'C:\\Windows\\SysWOW64\\WindowsPowerShell\\v1.0\\powershell.exe';
+  if (fs.existsSync(x86PowerPoint) && fs.existsSync(x86PowerShell)) return x86PowerShell;
+  return 'powershell.exe';
+}
+
 // ── Phase 1: Screenshots ──────────────────────────────────────────────────────
 
-async function captureSlides() {
-  // Check if pre-rendered images exist in the project dir
+function completePreRenderedSlides() {
   const preRendered = Array.from({ length: TOTAL }, (_, i) =>
     path.join(PROJECT, `slide_${pad(i + 1)}.png`)
   ).filter(f => fs.existsSync(f));
 
-  if (preRendered.length === TOTAL) {
-    console.log('📸 Phase 1: Using pre-rendered slide images...');
-    for (let i = 0; i < TOTAL; i++) {
-      const src = path.join(PROJECT, `slide_${pad(i + 1)}.png`);
-      const dst = path.join(TMP, `slide_${pad(i + 1)}.png`);
-      fs.copyFileSync(src, dst);
-      console.log(`  slide ${pad(i + 1)}/${TOTAL} → copied from project dir`);
-    }
-    console.log('  Done.\n');
-    return;
-  }
+  return preRendered.length === TOTAL;
+}
 
-  if (!fs.existsSync(HTML)) {
-    throw new Error(
-      `No slide_NN.png files found in ${PROJECT} and no index.html to capture from.\n` +
-      `Either place slide_01.png…slide_${pad(TOTAL)}.png in the project dir, or add an index.html.`
-    );
+function copyPreRenderedSlides() {
+  console.log('📸 Phase 1: Using pre-rendered slide images...');
+  for (let i = 0; i < TOTAL; i++) {
+    const src = path.join(PROJECT, `slide_${pad(i + 1)}.png`);
+    const dst = path.join(TMP, `slide_${pad(i + 1)}.png`);
+    fs.copyFileSync(src, dst);
+    console.log(`  slide ${pad(i + 1)}/${TOTAL} → copied from project dir`);
   }
+  console.log('  Done.\n');
+}
 
+async function captureHtmlSlides() {
   console.log('📸 Phase 1: Capturing slides via Playwright...');
   const { chromium } = await import('playwright');
   const browser = await chromium.launch();
   // deviceScaleFactor:2 → screenshots at 780×1688 (retina 2x, much sharper)
   const context = await browser.newContext({ deviceScaleFactor: 2 });
   const page    = await context.newPage();
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setViewportSize({ width: HTML_VIEWPORT_WIDTH, height: HTML_VIEWPORT_HEIGHT });
   await page.goto(`file://${HTML}`);
   await page.waitForLoadState('networkidle');
 
@@ -494,6 +596,227 @@ async function captureSlides() {
 
   await browser.close();
   console.log('  Done.\n');
+}
+
+function findProjectPptx() {
+  if (PPTX) return PPTX;
+
+  const pptxFiles = fs.readdirSync(PROJECT)
+    .filter(f => f.toLowerCase().endsWith('.pptx'))
+    .sort();
+
+  if (pptxFiles.length === 0) return null;
+  if (pptxFiles.length > 1) {
+    throw new Error(
+      `Multiple .pptx files found in ${PROJECT}.\n` +
+      `Please pass the intended file explicitly, for example: node generate-video.mjs "${path.join(PROJECT, pptxFiles[0])}"`
+    );
+  }
+  return path.join(PROJECT, pptxFiles[0]);
+}
+
+function convertPptxToPdf(pptxFile) {
+  const soffice = findLibreOffice();
+  if (!soffice) {
+    throw new Error(
+      'LibreOffice was not found. Install LibreOffice and make `soffice` available on PATH, ' +
+      'or use the default install location on Windows/macOS.'
+    );
+  }
+
+  const pdfFile = path.join(TMP, `${path.basename(pptxFile, path.extname(pptxFile))}.pdf`);
+  fs.rmSync(pdfFile, { force: true });
+  execFileSync(soffice, [
+    '--headless',
+    '--convert-to', 'pdf',
+    '--outdir', TMP,
+    pptxFile,
+  ], { stdio: 'inherit' });
+
+  if (!fs.existsSync(pdfFile)) {
+    throw new Error(`LibreOffice did not create the expected PDF: ${pdfFile}`);
+  }
+
+  return pdfFile;
+}
+
+function capturePptxWithPowerPoint(pptxFile) {
+  if (process.platform !== 'win32') return false;
+  const powerShell = findPowerPointPowerShell();
+
+  const ps = `
+$ErrorActionPreference = 'Stop'
+$pptx = ${psQuote(pptxFile)}
+$outDir = ${psQuote(TMP)}
+$width = ${PPTX_IMAGE_WIDTH}
+$height = ${PPTX_IMAGE_HEIGHT}
+$app = $null
+$presentation = $null
+try {
+  $app = New-Object -ComObject PowerPoint.Application
+  $presentation = $app.Presentations.Open($pptx, $true, $false, $false)
+  for ($i = 1; $i -le $presentation.Slides.Count; $i++) {
+    $out = Join-Path $outDir ("slide_{0:D2}.png" -f $i)
+    $presentation.Slides.Item($i).Export($out, "PNG", $width, $height) | Out-Null
+    Write-Host ("  slide {0:D2}/{1} -> {2}" -f $i, $presentation.Slides.Count, (Split-Path $out -Leaf))
+  }
+}
+catch {
+  Write-Error $_
+  exit 1
+}
+finally {
+  try { if ($presentation -ne $null) { $presentation.Close() | Out-Null } } catch {}
+  try { if ($app -ne $null) { $app.Quit() | Out-Null } } catch {}
+  try { if ($presentation -ne $null) { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($presentation) | Out-Null } } catch {}
+  try { if ($app -ne $null) { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($app) | Out-Null } } catch {}
+}
+`;
+
+  try {
+    execFileSync(powerShell, [
+      '-NoProfile',
+      '-ExecutionPolicy', 'Bypass',
+      '-Command', ps,
+    ], { stdio: 'inherit' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function normalizeImage(inputFile, outputFile, width, height) {
+  const ffmpeg = findFfmpeg();
+  if (!ffmpeg) {
+    throw new Error('ffmpeg was not found. Install ffmpeg and make it available on PATH.');
+  }
+
+  execFileSync(ffmpeg, [
+    '-y',
+    '-i', inputFile,
+    '-vf', `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=white`,
+    '-frames:v', '1',
+    outputFile,
+  ], { stdio: 'ignore' });
+}
+
+function renderPdfWithPdftoppm(pdfFile) {
+  const pdftoppm = findPdfToPpm();
+  if (!pdftoppm) return false;
+
+  const prefix = path.join(TMP, 'pptx_page');
+  execFileSync(pdftoppm, ['-png', '-r', '144', pdfFile, prefix], { stdio: 'inherit' });
+
+  const rendered = fs.readdirSync(TMP)
+    .filter(f => /^pptx_page-\d+\.png$/i.test(f))
+    .sort((a, b) => Number(a.match(/\d+/)[0]) - Number(b.match(/\d+/)[0]));
+
+  for (let i = 0; i < rendered.length; i++) {
+    const src = path.join(TMP, rendered[i]);
+    const dst = path.join(TMP, `slide_${pad(i + 1)}.png`);
+    normalizeImage(src, dst, PPTX_IMAGE_WIDTH, PPTX_IMAGE_HEIGHT);
+    fs.rmSync(src, { force: true });
+    console.log(`  slide ${pad(i + 1)}/${rendered.length} → ${path.basename(dst)}`);
+  }
+
+  return rendered.length > 0;
+}
+
+function renderPdfWithFfmpeg(pdfFile) {
+  const ffmpeg = findFfmpeg();
+  if (!ffmpeg) {
+    throw new Error('ffmpeg was not found. Install ffmpeg and make it available on PATH.');
+  }
+
+  const outPattern = path.join(TMP, 'slide_%02d.png');
+  execFileSync(ffmpeg, [
+    '-y',
+    '-i', pdfFile,
+    '-vf', `scale=${PPTX_IMAGE_WIDTH}:${PPTX_IMAGE_HEIGHT}:force_original_aspect_ratio=decrease,pad=${PPTX_IMAGE_WIDTH}:${PPTX_IMAGE_HEIGHT}:(ow-iw)/2:(oh-ih)/2:color=white`,
+    outPattern,
+  ], { stdio: 'inherit' });
+}
+
+function assertSlideImagesComplete() {
+  const missing = [];
+  for (let i = 0; i < TOTAL; i++) {
+    const file = path.join(TMP, `slide_${pad(i + 1)}.png`);
+    if (!fs.existsSync(file)) missing.push(path.basename(file));
+  }
+
+  const extra = fs.readdirSync(TMP)
+    .filter(f => /^slide_\d+\.png$/i.test(f))
+    .filter(f => {
+      const n = Number(f.match(/\d+/)[0]);
+      return n > TOTAL;
+    });
+
+  if (missing.length || extra.length) {
+    throw new Error(
+      `Rendered slide count does not match scripts count (${TOTAL}).` +
+      (missing.length ? ` Missing: ${missing.join(', ')}.` : '') +
+      (extra.length ? ` Extra: ${extra.join(', ')}.` : '')
+    );
+  }
+}
+
+function capturePptxSlides(pptxFile) {
+  if (!fs.existsSync(pptxFile)) {
+    throw new Error(`PPTX file not found: ${pptxFile}`);
+  }
+
+  console.log('📸 Phase 1: Capturing slides from PPTX...');
+  console.log(`  PPTX → ${pptxFile}`);
+  console.log(`  Size → ${PPTX_IMAGE_WIDTH}x${PPTX_IMAGE_HEIGHT}`);
+  for (const file of fs.readdirSync(TMP)) {
+    if (/^(slide_\d+|pptx_page-\d+)\.png$/i.test(file)) {
+      fs.rmSync(path.join(TMP, file), { force: true });
+    }
+  }
+
+  if (capturePptxWithPowerPoint(pptxFile)) {
+    assertSlideImagesComplete();
+    console.log('  Done.\n');
+    return;
+  }
+
+  if (process.platform === 'win32') {
+    console.log('  PowerPoint export failed or is unavailable; trying LibreOffice PDF pipeline...');
+  }
+
+  const pdfFile = convertPptxToPdf(pptxFile);
+
+  if (!renderPdfWithPdftoppm(pdfFile)) {
+    console.log('  pdftoppm not found; trying ffmpeg PDF renderer...');
+    renderPdfWithFfmpeg(pdfFile);
+  }
+
+  assertSlideImagesComplete();
+  console.log('  Done.\n');
+}
+
+async function captureSlides() {
+  if (completePreRenderedSlides()) {
+    copyPreRenderedSlides();
+    return;
+  }
+
+  if (HTML && fs.existsSync(HTML)) {
+    await captureHtmlSlides();
+    return;
+  }
+
+  const pptxFile = findProjectPptx();
+  if (pptxFile) {
+    PPTX = pptxFile;
+    capturePptxSlides(pptxFile);
+    return;
+  }
+
+  throw new Error(
+    `No slide_NN.png files, index.html, or .pptx file found in ${PROJECT}.\n` +
+    `Place slide_01.png…slide_${pad(TOTAL)}.png in the project dir, add an index.html, or provide a .pptx file.`
+  );
 }
 
 // ── Phase 2: TTS Audio ───────────────────────────────────────────────────────
@@ -622,9 +945,11 @@ function buildAndConcat() {
       : `-i "${audioPath(i)}"`,
   ]);
 
-  // filter_complex: interleave video+audio streams into concat
-  const refs   = Array.from({ length: TOTAL }, (_, i) => `[${i * 2}:v][${i * 2 + 1}:a]`).join('');
-  const filter = `${refs}concat=n=${TOTAL}:v=1:a=1[outv][outa]`;
+  // Normalize sample aspect ratio before concat; PowerPoint PNG exports can carry
+  // non-1:1 SAR metadata even when pixel dimensions match.
+  const videoFilters = Array.from({ length: TOTAL }, (_, i) => `[${i * 2}:v]setsar=1[v${i}]`).join(';');
+  const refs = Array.from({ length: TOTAL }, (_, i) => `[v${i}][${i * 2 + 1}:a]`).join('');
+  const filter = `${videoFilters};${refs}concat=n=${TOTAL}:v=1:a=1[outv][outa]`;
 
   // Write filter to a tmp file to avoid shell arg-length limits
   const filterFile = path.join(TMP, 'filter.txt');
@@ -651,12 +976,8 @@ async function main() {
     process.exit(1);
   }
 
-  if (!fs.existsSync(PROJECT)) {
-    console.error(`Error: project directory not found: ${PROJECT}`);
-    process.exit(1);
-  }
-
   console.log(`Project : ${PROJECT}`);
+  if (PPTX) console.log(`PPTX    : ${PPTX}`);
   console.log(`Slides  : ${TOTAL}`);
   console.log(`Engine  : ${TTS_ENGINE}`);
   console.log(`Voice   : ${VOICE}\n`);
