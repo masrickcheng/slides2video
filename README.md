@@ -1,6 +1,6 @@
 # PPT Video Generator
 
-Converts an HTML slide deck (or pre-rendered PNG images) into a single MP4 video with AI-narrated voiceover using 豆包 TTS.
+Converts an HTML slide deck (or pre-rendered PNG images) into a single MP4 video with AI-narrated voiceover. Edge TTS is the default engine; 豆包 TTS is also supported.
 
 ## Prerequisites
 
@@ -10,7 +10,20 @@ npm install
 npx playwright install chromium      # only needed if using Playwright capture
 ```
 
-## Getting a 豆包 API Key
+## TTS Engines
+
+By default, the script uses Edge TTS with voice `zh-CN-XiaoxiaoNeural`, so no API key is required.
+
+Engine settings live in `.env`:
+
+```
+TTS_ENGINE=edge_tts
+EDGE_TTS_VOICE=zh-CN-XiaoxiaoNeural
+```
+
+When `TTS_ENGINE=edge_tts`, legacy 豆包 voice IDs in `scripts.json` are ignored and `EDGE_TTS_VOICE` is used instead.
+
+To use 豆包 instead, set credentials in `.env` (at repo root):
 
 1. Log in to [火山方舟控制台](https://console.volcengine.com/ark)
 2. 体验中心 → 语音模型 → **开通语音模型** (Doubao-语音合成)
@@ -19,9 +32,8 @@ npx playwright install chromium      # only needed if using Playwright capture
 
 直达链接：https://console.volcengine.com/ark/region:ark+cn-beijing/openManagement?tab=TTS
 
-Set credentials in `.env` (at repo root):
-
 ```
+TTS_ENGINE=doubao
 DOUBAO_APP_ID=your_app_id
 DOUBAO_ACCESS_TOKEN=your_access_token
 DOUBAO_VOICE=zh_male_shaonianzixin_moon_bigtts   # optional, this is the default
@@ -46,9 +58,9 @@ node generate-video.mjs --list-voices 男
 
 | Flag | Description |
 |---|---|
-| `--voice <voice_type>` | Override the TTS voice for this run |
+| `--voice <voice_name>` | Override the TTS voice for this run |
 | `--skip-screenshots` | Skip Phase 1 — reuse existing `tmp/slide_NN.png` |
-| `--skip-audio` | Skip Phase 2 — reuse existing `tmp/slide_NN.pcm` |
+| `--skip-audio` | Skip Phase 2 — reuse existing `tmp/slide_NN.mp3` or `tmp/slide_NN.pcm` |
 | `--list-voices [keyword]` | Print full voice catalog and exit; keyword filters by ID/name/lang/scene |
 
 ## Project Directory Structure
@@ -78,7 +90,7 @@ node generate-video.mjs --list-voices 男
 **With per-project voice override:**
 ```json
 {
-  "voice": "zh_male_jieshuonansheng_mars_bigtts",
+  "voice": "zh-CN-XiaoxiaoNeural",
   "scripts": [
     "Slide 1 narration.",
     "Slide 2 narration."
@@ -114,7 +126,7 @@ window.goTo = function(i) {
 | Phase | Description |
 |---|---|
 | 1 | Capture or copy slide PNGs → `tmp/slide_NN.png` |
-| 2 | Generate TTS audio via 豆包 V3 API → `tmp/slide_NN.pcm` (24 kHz PCM) |
+| 2 | Generate TTS audio → Edge TTS writes `tmp/slide_NN.mp3`; 豆包 writes `tmp/slide_NN.pcm` |
 | 3 | Encode per-slide MP4 clips (libx264 + AAC) → `tmp/clip_NN.mp4` |
 | 4 | Concatenate video streams (copy) + binary-concat PCM audio → final mux → `output.mp4` |
 
@@ -132,7 +144,11 @@ node generate-video.mjs my-project --skip-screenshots
 
 ## Voice Reference
 
-Default: `zh_male_shaonianzixin_moon_bigtts` (少年梓辛/Brayan)
+Default engine: `edge_tts`
+
+Default voice: `zh-CN-XiaoxiaoNeural` (Edge TTS)
+
+Default 豆包 voice: `zh_male_shaonianzixin_moon_bigtts` (少年梓辛/Brayan)
 
 Run `node generate-video.mjs --list-voices [keyword]` to filter. Full catalog:
 
