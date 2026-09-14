@@ -2,8 +2,18 @@
   "name": "ppt-video-generator",
   "version": "1.0.0",
   "type": "module",
+  "scripts": {
+    "lint": "eslint generate-video.mjs",
+    "format:check": "prettier --check AGENTS.md .harness.yaml package.json eslint.config.js .prettierrc.json generate-video.mjs"
+  },
   "dependencies": {
     "msedge-tts": "^2.0.7",
     "playwright": "^1.59.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.10.0",
+    "globals": "^17.12.0",
+    "prettier": "^3.9.6"
   }
 }

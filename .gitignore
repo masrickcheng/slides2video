@@ -16,3 +16,6 @@ ppt/
 # Temp output
 */tmp/
 *.mp4
+
+#
+.agents

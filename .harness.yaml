@@ -1,0 +1,32 @@
+schema: 1
+base: "1.0"
+
+components:
+  H0:
+    status: installed
+  H1:
+    status: installed
+    profiles:
+      node-typescript:
+        status: installed
+        scopes:
+          - "."
+  H2:
+    status: partial
+    profiles:
+      node-typescript:
+        status: partial
+        scopes:
+          - "."
+  H3:
+    status: not-installed
+  H4:
+    status: not-installed
+  H5:
+    status: not-installed
+  H6:
+    status: not-installed
+  H7:
+    status: not-installed
+  X:
+    status: not-installed
