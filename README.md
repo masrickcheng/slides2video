@@ -28,11 +28,23 @@ Windows:
 
 The script uses Edge TTS with voice `zh-CN-XiaoxiaoNeural` by default, so no API key is required.
 
-Voice settings can live in `.env`:
+Voice and LLM settings live in the repo-level `.env` file. Start from `.env.example`:
 
 ```
 EDGE_TTS_VOICE=zh-CN-XiaoxiaoNeural
+
+OPENAI_API_KEY=sk-...
+OPENAI_BASE_URL=https://api.openai.com
+OPENAI_MODEL=gpt-5.5
+OPENAI_FALLBACK_MODEL=gpt-5.4
+OPENAI_RETRIES=3
+OPENAI_TIMEOUT_SECONDS=300
+OPENAI_MAX_OUTPUT_TOKENS=8192
 ```
+
+When PowerPoint text extraction is available, the raw extracted narration is written to both `<project-dir>/tmp/raw_scripts.json` and `<project-dir>/scripts.json`. Before calling Edge TTS, the script preprocesses that raw text with an OpenAI-compatible Responses API using the prompt in `tts_text_preprocessing_prompt.md`, then writes the final TTS-ready narration back to `<project-dir>/scripts.json`. If `OPENAI_API_KEY` is not configured, or `--no-llm` is used, preprocessing is skipped and the raw `scripts.json` remains usable for TTS.
+
+`scripts.json` is the final file used for TTS.
 
 ## Usage
 
@@ -57,6 +69,8 @@ node generate-video.mjs --list-voices zh-CN
 | `--voice <voice_name>` | Override the TTS voice for this run |
 | `--skip-screenshots` | Skip Phase 1 — reuse existing `tmp/slide_NN.png` |
 | `--skip-audio` | Skip Phase 2 — reuse existing `tmp/slide_NN.mp3` |
+| `--skip-tts-preprocess` | Skip the LLM preprocessing step before Edge TTS |
+| `--no-llm` | Alias for `--skip-tts-preprocess` |
 | `--list-voices [keyword]` | Print the bundled Edge TTS voice list and exit |
 
 ## Project Directory Structure
@@ -65,12 +79,13 @@ node generate-video.mjs --list-voices zh-CN
 <repo>/
   generate-video.mjs      ← the script
   package.json
-  .env                    ← optional Edge TTS voice settings (git-ignored)
+  .env.example            ← environment template
+  .env                    ← local voice and LLM settings (git-ignored)
   ppt/
     my-project/
       scripts.json        ← narration scripts (required)
       deck.pptx           ← slide deck (required)
-      tmp/                ← intermediate files (auto-created, git-ignored)
+      tmp/                ← intermediate files, including raw_scripts.json (auto-created, git-ignored)
       output.mp4          ← final output (git-ignored)
 ```
 
@@ -94,7 +109,7 @@ node generate-video.mjs --list-voices zh-CN
 
 Alternatively use `scripts.txt` — one line per slide, blank lines ignored.
 
-When generated from PowerPoint text extraction, `scripts.json` uses the simple array format shown above. Each array item is a single-line string with no carriage returns or line feeds; the JSON file itself still uses normal pretty-printed formatting.
+When generated from PowerPoint text extraction, `tmp/raw_scripts.json` is the direct extracted draft, and `scripts.json` initially receives the same content. After optional LLM preprocessing, `scripts.json` is overwritten with the final TTS-ready text. Each array item is a single-line string with no carriage returns or line feeds; the JSON file itself still uses normal pretty-printed formatting.
 
 ## PPTX Slide Capture
 
@@ -108,7 +123,7 @@ node generate-video.mjs ppt/my-project/deck.pptx
 
 PPTX slide count must match the number of scripts. PPTX input is rendered as landscape `1920 × 1080` images by default.
 
-When the Windows PowerPoint export path is used, the script also writes `scripts.json` next to the processed `.pptx`. It contains one narration string per slide, assembled from text-bearing shapes read through PowerPoint Shape objects. Text entries are ordered visually top-to-bottom, then left-to-right within rows whose `top` values differ by no more than 15 points. Any carriage returns or line feeds inside extracted text are replaced with spaces before writing.
+When the Windows PowerPoint export path is used, the script also writes `tmp/raw_scripts.json` and an initial `scripts.json`. They contain one narration string per slide, assembled from text-bearing shapes read through PowerPoint Shape objects. Text entries are ordered visually top-to-bottom, then left-to-right within rows whose `top` values differ by no more than 15 points. Any carriage returns or line feeds inside extracted text are replaced with spaces before writing.
 
 ## Output
 
@@ -118,8 +133,8 @@ When the Windows PowerPoint export path is used, the script also writes `scripts
 
 | Phase | Description |
 |---|---|
-| 1 | Capture PPTX slides → `tmp/slide_NN.png`; with PowerPoint, also extract slide text → `scripts.json` next to the PPTX |
-| 2 | Generate TTS audio → Edge TTS writes `tmp/slide_NN.mp3` |
+| 1 | Capture PPTX slides → `tmp/slide_NN.png`; with PowerPoint, also extract slide text → `tmp/raw_scripts.json` and initial `scripts.json` |
+| 2 | Preprocess `tmp/raw_scripts.json` with `tts_text_preprocessing_prompt.md` when `OPENAI_API_KEY` is configured, write final narration to `scripts.json`, then generate TTS audio → Edge TTS writes `tmp/slide_NN.mp3` |
 | 3+4 | Build one ffmpeg concat graph from all slide images and audio files → `output.mp4` |
 
 The gapless audio technique (Phase 4) extracts audio from each clip as raw PCM at 44.1 kHz, binary-concatenates them, then encodes AAC once in the final mux — avoiding the ~23 ms encoder-delay gap that would appear if AAC streams were naively concatenated.

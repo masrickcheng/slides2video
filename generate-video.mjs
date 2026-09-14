@@ -11,6 +11,8 @@
  *   --skip-screenshots       Skip Phase 1 (reuse existing slide_NN.png in tmp/)
  *   --skip-images            Alias for --skip-screenshots
  *   --skip-audio             Skip Phase 2 (reuse existing slide_NN.mp3 in tmp/)
+ *   --skip-tts-preprocess    Skip LLM text preprocessing before TTS
+ *   --no-llm                 Alias for --skip-tts-preprocess
  *   --list-voices [keyword]  Print voice catalog and exit (optional keyword filter)
  *
  * Inputs (inside <project-dir>):
@@ -50,16 +52,29 @@ import { MsEdgeTTS, OUTPUT_FORMAT } from 'msedge-tts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_EDGE_VOICE = 'zh-CN-XiaoxiaoNeural';
+const DEFAULT_OPENAI_BASE_URL = 'https://api.openai.com';
+const DEFAULT_OPENAI_MODEL = 'gpt-5.5';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-// Auto-load .env from ppt/
-const envPath = path.join(__dirname, '.env');
-if (fs.existsSync(envPath)) {
-  for (const line of fs.readFileSync(envPath, 'utf8').split(/\r?\n/)) {
-    const m = line.match(/^([A-Z_]+)=(.*)$/);
-    if (m) process.env[m[1]] ??= m[2];
+function parseEnvFile(filePath) {
+  const values = {};
+  if (!fs.existsSync(filePath)) return values;
+  for (const rawLine of fs.readFileSync(filePath, 'utf8').split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#') || !line.includes('=')) continue;
+    const [rawKey, ...rawValueParts] = line.split('=');
+    const key = rawKey.trim();
+    const value = rawValueParts.join('=').trim().replace(/^['"]|['"]$/g, '');
+    if (/^[A-Z_][A-Z0-9_]*$/.test(key)) values[key] = value;
   }
+  return values;
+}
+
+// Auto-load repo-level .env. Secrets stay in .env; .env.example documents keys.
+const envPath = path.join(__dirname, '.env');
+for (const [key, value] of Object.entries(parseEnvFile(envPath))) {
+  process.env[key] ??= value;
 }
 
 // Parse CLI args
@@ -104,7 +119,7 @@ function getProjectArg() {
 
 const projectArg = getProjectArg();
 if (!projectArg) {
-  console.error('Usage: node generate-video.mjs <project-dir|deck.pptx> [--voice <voice>] [--screenshots-only] [--skip-screenshots] [--skip-images] [--skip-audio] [--concat-only]');
+  console.error('Usage: node generate-video.mjs <project-dir|deck.pptx> [--voice <voice>] [--screenshots-only] [--skip-screenshots] [--skip-images] [--skip-audio] [--skip-tts-preprocess] [--no-llm] [--concat-only]');
   console.error('       node generate-video.mjs --list-voices [keyword]');
   process.exit(1);
 }
@@ -112,11 +127,15 @@ if (!projectArg) {
 const SCREENSHOTS_ONLY = args.includes('--screenshots-only');
 const SKIP_SCREENSHOTS = args.includes('--skip-screenshots') || args.includes('--skip-images') || args.includes('--concat-only');
 const SKIP_AUDIO       = args.includes('--skip-audio')       || args.includes('--concat-only') || SCREENSHOTS_ONLY;
+const SKIP_TTS_PREPROCESS = args.includes('--skip-tts-preprocess') || args.includes('--no-llm') || SKIP_AUDIO;
 const VOICE_ARG = getOptionValue('--voice');
 const PPTX_IMAGE_WIDTH = 1920;
 const PPTX_IMAGE_HEIGHT = 1080;
 const PPTX_TEXT_JSON = 'scripts.json';
+const RAW_PPTX_TEXT_JSON = 'raw_scripts.json';
+const TTS_PREPROCESS_PROMPT = 'tts_text_preprocessing_prompt.md';
 const TEXT_ROW_TOLERANCE_POINTS = 15;
+let USE_RAW_SCRIPTS_FOR_THIS_RUN = false;
 
 function resolveInput(inputArg) {
   const inputPath = path.resolve(__dirname, inputArg);
@@ -154,29 +173,46 @@ if (PPTX && !fs.existsSync(PPTX)) {
 
 function loadScripts() {
   const jsonFile = path.join(PROJECT, 'scripts.json');
+  const rawJsonFile = path.join(TMP, RAW_PPTX_TEXT_JSON);
   const txtFile  = path.join(PROJECT, 'scripts.txt');
+
+  if (USE_RAW_SCRIPTS_FOR_THIS_RUN && fs.existsSync(rawJsonFile)) {
+    const data = JSON.parse(fs.readFileSync(rawJsonFile, 'utf8'));
+    if (!Array.isArray(data)) {
+      throw new Error(`Invalid ${RAW_PPTX_TEXT_JSON} in ${TMP}: expected an array.`);
+    }
+    return { scripts: data, voice: null, source: 'raw' };
+  }
 
   if (fs.existsSync(jsonFile)) {
     const data = JSON.parse(fs.readFileSync(jsonFile, 'utf8'));
-    if (Array.isArray(data)) return { scripts: data, voice: null };
+    if (Array.isArray(data)) return { scripts: data, voice: null, source: 'final' };
     // { voice?, scripts: [] }
     if (!Array.isArray(data.scripts)) {
       throw new Error(`Invalid scripts.json in ${PROJECT}: expected an array or an object with a scripts array.`);
     }
-    return { scripts: data.scripts, voice: data.voice ?? null };
+    return { scripts: data.scripts, voice: data.voice ?? null, source: 'final' };
   }
   if (fs.existsSync(txtFile)) {
     const scripts = fs.readFileSync(txtFile, 'utf8')
       .split('\n')
       .map(l => l.trim())
       .filter(Boolean);
-    return { scripts, voice: null };
+    return { scripts, voice: null, source: 'txt' };
   }
-  throw new Error(`No scripts.json or scripts.txt found in ${PROJECT}`);
+  if (fs.existsSync(rawJsonFile)) {
+    const data = JSON.parse(fs.readFileSync(rawJsonFile, 'utf8'));
+    if (!Array.isArray(data)) {
+      throw new Error(`Invalid ${RAW_PPTX_TEXT_JSON} in ${TMP}: expected an array.`);
+    }
+    return { scripts: data, voice: null, source: 'raw' };
+  }
+  throw new Error(`No scripts.json or scripts.txt found in ${PROJECT}, and no ${RAW_PPTX_TEXT_JSON} found in ${TMP}`);
 }
 
 let SCRIPTS = [];
 let scriptVoice = null;
+let scriptSource = null;
 let VOICE = null;
 let TOTAL = 0;
 
@@ -189,12 +225,206 @@ function loadRuntimeScripts() {
   const loaded = loadScripts();
   SCRIPTS = loaded.scripts;
   scriptVoice = loaded.voice;
+  scriptSource = loaded.source;
   VOICE = resolveVoice();
   TOTAL = SCRIPTS.length;
 }
 
 const pad   = n => String(n).padStart(2, '0');
 const AUDIO_EXT = 'mp3';
+
+// ── OpenAI-compatible LLM helpers ────────────────────────────────────────────
+
+function isRealSecret(value) {
+  const text = String(value ?? '').trim();
+  if (!text) return false;
+  const upper = text.toUpperCase();
+  return !upper.startsWith('YOUR_') && !['TODO', 'TBD', 'CHANGE_ME', 'CHANGEME', 'PLACEHOLDER'].includes(upper);
+}
+
+function openaiModelCandidates(model, fallbackModel = '') {
+  const candidates = [];
+  for (const value of [model, fallbackModel]) {
+    const text = String(value ?? '').trim();
+    if (text && !candidates.includes(text)) candidates.push(text);
+  }
+  return candidates;
+}
+
+function extractOpenaiText(body) {
+  if (typeof body.output_text === 'string') return body.output_text.trim();
+
+  const chunks = [];
+  if (Array.isArray(body.output)) {
+    for (const item of body.output) {
+      if (!Array.isArray(item?.content)) continue;
+      for (const content of item.content) {
+        if (typeof content?.text === 'string') chunks.push(content.text);
+      }
+    }
+  }
+  if (chunks.length) return chunks.join('\n').trim();
+
+  if (Array.isArray(body.choices)) {
+    for (const choice of body.choices) {
+      const content = choice?.message?.content;
+      if (typeof content === 'string') chunks.push(content);
+      else if (typeof choice?.text === 'string') chunks.push(choice.text);
+    }
+  }
+  return chunks.join('\n').trim();
+}
+
+function isTransientOpenaiStatus(status) {
+  return status === 408 || status === 409 || status === 429 || status >= 500;
+}
+
+function retryDelay(attempt) {
+  return Math.min(30, 2 ** attempt) + Math.random();
+}
+
+async function openaiResponseJson(endpoint, payload, apiKey, retries, timeoutSeconds) {
+  let lastError = '';
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutSeconds * 1000);
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+      const text = await response.text();
+      if (!response.ok) {
+        lastError = `HTTP ${response.status}: ${text.slice(0, 500)}`;
+        if (attempt >= retries || !isTransientOpenaiStatus(response.status)) {
+          const error = new Error(lastError);
+          error.retryable = false;
+          throw error;
+        }
+      } else {
+        return JSON.parse(text);
+      }
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
+      if (err?.retryable === false) throw err;
+      if (attempt >= retries) throw new Error(lastError, { cause: err });
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    const delay = retryDelay(attempt);
+    console.log(`  OpenAI attempt ${attempt + 1} failed, retrying in ${delay.toFixed(1)}s: ${lastError.slice(0, 240)}`);
+    await new Promise(resolve => setTimeout(resolve, delay * 1000));
+  }
+  throw new Error(lastError || 'OpenAI request failed');
+}
+
+function stripMarkdownFence(text) {
+  const trimmed = text.trim();
+  const match = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  return match ? match[1].trim() : trimmed;
+}
+
+function parsePreprocessedScripts(text) {
+  const body = JSON.parse(stripMarkdownFence(text));
+  const scripts = Array.isArray(body) ? body : body?.scripts;
+  if (!Array.isArray(scripts)) {
+    throw new Error('LLM response must be a JSON array or an object with a scripts array.');
+  }
+  return scripts.map((script, index) => {
+    if (typeof script !== 'string') {
+      throw new Error(`LLM response script ${index + 1} is not a string.`);
+    }
+    return script.trim();
+  });
+}
+
+async function preprocessScriptsForTts() {
+  if (SKIP_TTS_PREPROCESS) {
+    writeFinalScriptsJson();
+    return;
+  }
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!isRealSecret(apiKey)) {
+    console.log('TTS prep: skipped (OPENAI_API_KEY is not configured).\n');
+    writeFinalScriptsJson();
+    return;
+  }
+
+  const promptFile = path.join(__dirname, TTS_PREPROCESS_PROMPT);
+  if (!fs.existsSync(promptFile)) {
+    throw new Error(`TTS preprocessing prompt not found: ${promptFile}`);
+  }
+
+  const baseUrl = (process.env.OPENAI_BASE_URL || process.env.OPENAI_API_BASE || DEFAULT_OPENAI_BASE_URL).replace(/\/+$/, '');
+  const endpoint = baseUrl.endsWith('/v1') ? `${baseUrl}/responses` : `${baseUrl}/v1/responses`;
+  const models = openaiModelCandidates(
+    process.env.OPENAI_MODEL || DEFAULT_OPENAI_MODEL,
+    process.env.OPENAI_FALLBACK_MODEL || ''
+  );
+  const retries = Number(process.env.OPENAI_RETRIES || 3);
+  const timeoutSeconds = Number(process.env.OPENAI_TIMEOUT_SECONDS || 300);
+  const maxOutputTokens = Number(process.env.OPENAI_MAX_OUTPUT_TOKENS || 8192);
+  const prompt = fs.readFileSync(promptFile, 'utf8');
+
+  const requestBody = {
+    instructions: prompt,
+    hard_requirements: [
+      `必须输出 ${TOTAL} 条脚本，顺序与输入 scripts 数组完全一致。`,
+      '只输出 JSON，不要输出 Markdown、解释或额外文字。',
+      '输出可以是 JSON 字符串数组，或 {"scripts": [...]}。',
+    ],
+    scripts: SCRIPTS,
+  };
+
+  console.log('📝 TTS prep: preprocessing scripts with LLM...');
+  for (let index = 0; index < models.length; index++) {
+    const currentModel = models[index];
+    console.log(`  model → ${currentModel}`);
+    const payload = {
+      model: currentModel,
+      input: [
+        {
+          role: 'user',
+          content: [{ type: 'input_text', text: JSON.stringify(requestBody, null, 2) }],
+        },
+      ],
+      max_output_tokens: maxOutputTokens,
+    };
+
+    try {
+      const body = await openaiResponseJson(endpoint, payload, apiKey, retries, timeoutSeconds);
+      const preprocessed = parsePreprocessedScripts(extractOpenaiText(body));
+      if (preprocessed.length !== TOTAL) {
+        throw new Error(`LLM returned ${preprocessed.length} scripts, expected ${TOTAL}.`);
+      }
+      SCRIPTS = preprocessed;
+      writeFinalScriptsJson();
+      console.log(`  text → ${PPTX_TEXT_JSON}`);
+      console.log('  Done.\n');
+      return;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (index + 1 < models.length) {
+        console.log(`  model ${currentModel} failed, trying fallback ${models[index + 1]}: ${message}`);
+      } else {
+        throw new Error(`TTS preprocessing failed for model ${currentModel}: ${message}`, { cause: err });
+      }
+    }
+  }
+}
+
+function writeFinalScriptsJson() {
+  if (scriptSource === 'final') return;
+  fs.writeFileSync(path.join(PROJECT, PPTX_TEXT_JSON), JSON.stringify(SCRIPTS, null, 2), 'utf8');
+  scriptSource = 'final';
+}
 
 // ── External tools ────────────────────────────────────────────────────────────
 
@@ -298,13 +528,15 @@ function convertPptxToPdf(pptxFile) {
 function capturePptxWithPowerPoint(pptxFile) {
   if (process.platform !== 'win32') return false;
   const powerShell = findPowerPointPowerShell();
-  const textJsonFile = path.join(path.dirname(pptxFile), PPTX_TEXT_JSON);
+  const textJsonFile = path.join(TMP, RAW_PPTX_TEXT_JSON);
+  const finalTextJsonFile = path.join(path.dirname(pptxFile), PPTX_TEXT_JSON);
 
   const ps = `
 $ErrorActionPreference = 'Stop'
 $pptx = ${psQuote(pptxFile)}
 $outDir = ${psQuote(TMP)}
 $textJsonFile = ${psQuote(textJsonFile)}
+$finalTextJsonFile = ${psQuote(finalTextJsonFile)}
 $width = ${PPTX_IMAGE_WIDTH}
 $height = ${PPTX_IMAGE_HEIGHT}
 $rowTolerance = ${TEXT_ROW_TOLERANCE_POINTS}
@@ -393,7 +625,9 @@ try {
   $json = $scripts | ConvertTo-Json -Depth 4
   $utf8NoBom = New-Object System.Text.UTF8Encoding $false
   [System.IO.File]::WriteAllText($textJsonFile, $json, $utf8NoBom)
+  [System.IO.File]::WriteAllText($finalTextJsonFile, $json, $utf8NoBom)
   Write-Host ("  text -> {0}" -f (Split-Path $textJsonFile -Leaf))
+  Write-Host ("  text -> {0}" -f (Split-Path $finalTextJsonFile -Leaf))
 }
 catch {
   Write-Error $_
@@ -511,6 +745,7 @@ function capturePptxSlides(pptxFile) {
   }
 
   if (capturePptxWithPowerPoint(pptxFile)) {
+    USE_RAW_SCRIPTS_FOR_THIS_RUN = true;
     console.log('  Done.\n');
     return;
   }
@@ -643,6 +878,7 @@ async function main() {
   if (SCREENSHOTS_ONLY) {
     console.log(`✅ Screenshots saved to ${TMP}`);
     if (PPTX && process.platform === 'win32') {
+      console.log(`✅ Raw scripts saved to ${path.join(TMP, RAW_PPTX_TEXT_JSON)}`);
       console.log(`✅ Scripts saved to ${path.join(path.dirname(PPTX), PPTX_TEXT_JSON)}`);
     }
     return;
@@ -654,6 +890,7 @@ async function main() {
   console.log('Engine  : edge_tts');
   console.log(`Voice   : ${VOICE}\n`);
 
+  await preprocessScriptsForTts();
   if (!SKIP_AUDIO) await generateAudio();
   buildAndConcat();
 
