@@ -21,6 +21,7 @@
 - Favor intent-revealing names, explicit behavior, and readable code over clever compression; remove code made obsolete by the current change.
 - Keep interfaces small and intentional, with clear inputs, outputs, failure behavior, and compatibility expectations.
 - Prefer self-explanatory code; comments should explain non-obvious reasons, constraints, workarounds, and assumptions, and should stay accurate.
+- Prefer Chinese for new or updated code comments, unless English is clearer for external APIs, protocol terms, error text, or quoted upstream concepts.
 
 ## Node.js and TypeScript Code Quality
 

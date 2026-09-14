@@ -12,10 +12,10 @@ components:
         scopes:
           - "."
   H2:
-    status: partial
+    status: installed
     profiles:
       node-typescript:
-        status: partial
+        status: installed
         scopes:
           - "."
   H3:
