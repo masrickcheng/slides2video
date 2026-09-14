@@ -68,8 +68,8 @@ node generate-video.mjs --list-voices zh-CN
 |---|---|
 | `--voice <voice_name>` | Override the TTS voice for this run |
 | `--skip-screenshots` | Skip Phase 1 — reuse existing `tmp/slide_NN.png` |
-| `--skip-audio` | Skip Phase 2 — reuse existing `tmp/slide_NN.mp3` |
-| `--skip-tts-preprocess` | Skip the LLM preprocessing step before Edge TTS |
+| `--skip-audio` | Skip Phase 3 — reuse existing `tmp/slide_NN.mp3` |
+| `--skip-tts-preprocess` | Skip Phase 2 — the LLM preprocessing step before Edge TTS |
 | `--no-llm` | Alias for `--skip-tts-preprocess` |
 | `--list-voices [keyword]` | Print the bundled Edge TTS voice list and exit |
 
@@ -134,15 +134,16 @@ When the Windows PowerPoint export path is used, the script also writes `tmp/raw
 | Phase | Description |
 |---|---|
 | 1 | Capture PPTX slides → `tmp/slide_NN.png`; with PowerPoint, also extract slide text → `tmp/raw_scripts.json` and initial `scripts.json` |
-| 2 | Preprocess `tmp/raw_scripts.json` with `tts_text_preprocessing_prompt.md` when `OPENAI_API_KEY` is configured, write final narration to `scripts.json`, then generate TTS audio → Edge TTS writes `tmp/slide_NN.mp3` |
-| 3+4 | Build one ffmpeg concat graph from all slide images and audio files → `output.mp4` |
+| 2 | Preprocess `tmp/raw_scripts.json` with `tts_text_preprocessing_prompt.md` when `OPENAI_API_KEY` is configured, then write final narration to `scripts.json` |
+| 3 | Generate TTS audio from final narration → Edge TTS writes `tmp/slide_NN.mp3` |
+| 4 | Build one ffmpeg concat graph from all slide images and audio files → `output.mp4` |
 
 The gapless audio technique (Phase 4) extracts audio from each clip as raw PCM at 44.1 kHz, binary-concatenates them, then encodes AAC once in the final mux — avoiding the ~23 ms encoder-delay gap that would appear if AAC streams were naively concatenated.
 
 ## Resuming a Failed Run
 
 ```bash
-# Re-run only Phase 3+4 (screenshots and audio already in tmp/)
+# Re-run only Phase 4 (screenshots and audio already in tmp/)
 node generate-video.mjs my-project --skip-screenshots --skip-audio
 
 # Re-run Phase 2+3+4 (screenshots already in tmp/)

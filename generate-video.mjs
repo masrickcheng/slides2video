@@ -10,8 +10,8 @@
  *   --voice <voice_name>     Override voice from scripts.json/.env
  *   --skip-screenshots       Skip Phase 1 (reuse existing slide_NN.png in tmp/)
  *   --skip-images            Alias for --skip-screenshots
- *   --skip-audio             Skip Phase 2 (reuse existing slide_NN.mp3 in tmp/)
- *   --skip-tts-preprocess    Skip LLM text preprocessing before TTS
+ *   --skip-audio             Skip Phase 3 (reuse existing slide_NN.mp3 in tmp/)
+ *   --skip-tts-preprocess    Skip Phase 2 (LLM text preprocessing before TTS)
  *   --no-llm                 Alias for --skip-tts-preprocess
  *   --list-voices [keyword]  Print voice catalog and exit (optional keyword filter)
  *
@@ -383,7 +383,7 @@ async function preprocessScriptsForTts() {
     scripts: SCRIPTS,
   };
 
-  console.log('📝 TTS prep: preprocessing scripts with LLM...');
+  console.log('📝 Phase 2: Preprocessing scripts with LLM...');
   for (let index = 0; index < models.length; index++) {
     const currentModel = models[index];
     console.log(`  model → ${currentModel}`);
@@ -779,7 +779,7 @@ async function captureSlides() {
   );
 }
 
-// ── Phase 2: TTS Audio ───────────────────────────────────────────────────────
+// ── Phase 3: TTS Audio ───────────────────────────────────────────────────────
 
 async function ttsEdge(text) {
   const tts = new MsEdgeTTS();
@@ -798,7 +798,7 @@ async function ttsEdge(text) {
 }
 
 async function generateAudio() {
-  console.log('🔊 Phase 2: Generating TTS audio via Edge TTS...');
+  console.log('🔊 Phase 3: Generating TTS audio via Edge TTS...');
   for (let i = 0; i < TOTAL; i++) {
     const file = path.join(TMP, `slide_${pad(i + 1)}.${AUDIO_EXT}`);
     const buf  = await ttsEdge(SCRIPTS[i]);
@@ -808,7 +808,7 @@ async function generateAudio() {
   console.log('  Done.\n');
 }
 
-// ── Phase 3+4: Build + concat via filter_complex (frame-perfect A/V sync) ─────
+// ── Phase 4: Build + concat via filter_complex (frame-perfect A/V sync) ───────
 //
 // Each slide's video duration is set to its audio duration. A single ffmpeg pass
 // feeds all images and audio files through the concat filter, avoiding per-clip
@@ -826,7 +826,7 @@ function audioDuration(file) {
 }
 
 function buildAndConcat() {
-  console.log('🎬 Phase 3+4: Building video via filter_complex concat...');
+  console.log('🎬 Phase 4: Building video via filter_complex concat...');
 
   const durations = Array.from({ length: TOTAL }, (_, i) => {
     return audioDuration(audioPath(i));
