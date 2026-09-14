@@ -115,6 +115,8 @@ const SKIP_AUDIO       = args.includes('--skip-audio')       || args.includes('-
 const VOICE_ARG = getOptionValue('--voice');
 const PPTX_IMAGE_WIDTH = 1920;
 const PPTX_IMAGE_HEIGHT = 1080;
+const PPTX_TEXT_JSON = 'scripts.json';
+const TEXT_ROW_TOLERANCE_POINTS = 15;
 
 function resolveInput(inputArg) {
   const inputPath = path.resolve(__dirname, inputArg);
@@ -158,6 +160,9 @@ function loadScripts() {
     const data = JSON.parse(fs.readFileSync(jsonFile, 'utf8'));
     if (Array.isArray(data)) return { scripts: data, voice: null };
     // { voice?, scripts: [] }
+    if (!Array.isArray(data.scripts)) {
+      throw new Error(`Invalid scripts.json in ${PROJECT}: expected an array or an object with a scripts array.`);
+    }
     return { scripts: data.scripts, voice: data.voice ?? null };
   }
   if (fs.existsSync(txtFile)) {
@@ -170,15 +175,24 @@ function loadScripts() {
   throw new Error(`No scripts.json or scripts.txt found in ${PROJECT}`);
 }
 
-const { scripts: SCRIPTS, voice: scriptVoice } = loadScripts();
+let SCRIPTS = [];
+let scriptVoice = null;
+let VOICE = null;
+let TOTAL = 0;
 
 function resolveVoice() {
   if (VOICE_ARG) return VOICE_ARG;
   return scriptVoice ?? process.env.EDGE_TTS_VOICE ?? DEFAULT_EDGE_VOICE;
 }
 
-const VOICE = resolveVoice();
-const TOTAL = SCRIPTS.length;
+function loadRuntimeScripts() {
+  const loaded = loadScripts();
+  SCRIPTS = loaded.scripts;
+  scriptVoice = loaded.voice;
+  VOICE = resolveVoice();
+  TOTAL = SCRIPTS.length;
+}
+
 const pad   = n => String(n).padStart(2, '0');
 const AUDIO_EXT = 'mp3';
 
@@ -284,23 +298,102 @@ function convertPptxToPdf(pptxFile) {
 function capturePptxWithPowerPoint(pptxFile) {
   if (process.platform !== 'win32') return false;
   const powerShell = findPowerPointPowerShell();
+  const textJsonFile = path.join(path.dirname(pptxFile), PPTX_TEXT_JSON);
 
   const ps = `
 $ErrorActionPreference = 'Stop'
 $pptx = ${psQuote(pptxFile)}
 $outDir = ${psQuote(TMP)}
+$textJsonFile = ${psQuote(textJsonFile)}
 $width = ${PPTX_IMAGE_WIDTH}
 $height = ${PPTX_IMAGE_HEIGHT}
+$rowTolerance = ${TEXT_ROW_TOLERANCE_POINTS}
 $app = $null
 $presentation = $null
+function Add-ShapeTextBoxes($shape, $boxes) {
+  try {
+    if ($shape.HasTextFrame -and $shape.TextFrame.HasText) {
+      $text = [string]$shape.TextFrame.TextRange.Text
+      $trimmed = ($text -replace '[\\r\\n]+', ' ').Trim()
+      if ($trimmed.Length -gt 0) {
+        $boxes.Add([pscustomobject]@{
+          text = $trimmed
+          left = [double]$shape.Left
+          top = [double]$shape.Top
+          width = [double]$shape.Width
+          height = [double]$shape.Height
+        })
+      }
+    }
+  } catch {}
+
+  try {
+    if ($shape.GroupItems -ne $null) {
+      foreach ($childShape in $shape.GroupItems) {
+        Add-ShapeTextBoxes $childShape $boxes
+      }
+    }
+  } catch {}
+}
+
+function Get-SlideTextBoxes($slide) {
+  $boxes = New-Object System.Collections.Generic.List[object]
+  foreach ($shape in $slide.Shapes) {
+    try {
+      Add-ShapeTextBoxes $shape $boxes
+    } catch {}
+  }
+
+  $rows = New-Object System.Collections.Generic.List[object]
+  foreach ($box in ($boxes | Sort-Object top, left)) {
+    $row = $null
+    foreach ($candidate in $rows) {
+      if ([Math]::Abs($box.top - $candidate.top) -le $rowTolerance) {
+        $row = $candidate
+        break
+      }
+    }
+
+    if ($row -eq $null) {
+      $row = [pscustomobject]@{
+        top = $box.top
+        items = New-Object System.Collections.Generic.List[object]
+      }
+      $rows.Add($row)
+    }
+
+    $row.items.Add($box)
+  }
+
+  $ordered = New-Object System.Collections.Generic.List[object]
+  foreach ($row in ($rows | Sort-Object top)) {
+    foreach ($box in ($row.items | Sort-Object left)) {
+      $ordered.Add($box)
+    }
+  }
+
+  return $ordered
+}
 try {
   $app = New-Object -ComObject PowerPoint.Application
   $presentation = $app.Presentations.Open($pptx, $true, $false, $false)
+  $slideTexts = New-Object System.Collections.Generic.List[object]
   for ($i = 1; $i -le $presentation.Slides.Count; $i++) {
+    $slide = $presentation.Slides.Item($i)
     $out = Join-Path $outDir ("slide_{0:D2}.png" -f $i)
-    $presentation.Slides.Item($i).Export($out, "PNG", $width, $height) | Out-Null
+    $slide.Export($out, "PNG", $width, $height) | Out-Null
+    $slideTexts.Add([pscustomobject]@{
+      slideNumber = $i
+      image = (Split-Path $out -Leaf)
+      texts = @(Get-SlideTextBoxes $slide)
+    })
     Write-Host ("  slide {0:D2}/{1} -> {2}" -f $i, $presentation.Slides.Count, (Split-Path $out -Leaf))
   }
+  $scripts = @($slideTexts | ForEach-Object { ($_.texts | ForEach-Object { $_.text }) -join ' ' })
+  $json = $scripts | ConvertTo-Json -Depth 4
+  $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+  [System.IO.File]::WriteAllText($textJsonFile, $json, $utf8NoBom)
+  Write-Host ("  text -> {0}" -f (Split-Path $textJsonFile -Leaf))
 }
 catch {
   Write-Error $_
@@ -378,9 +471,11 @@ function renderPdfWithFfmpeg(pdfFile) {
   ], { stdio: 'inherit' });
 }
 
-function assertSlideImagesComplete() {
+function assertSlideImagesComplete(expectedTotal = TOTAL) {
+  if (!expectedTotal) return;
+
   const missing = [];
-  for (let i = 0; i < TOTAL; i++) {
+  for (let i = 0; i < expectedTotal; i++) {
     const file = path.join(TMP, `slide_${pad(i + 1)}.png`);
     if (!fs.existsSync(file)) missing.push(path.basename(file));
   }
@@ -389,12 +484,12 @@ function assertSlideImagesComplete() {
     .filter(f => /^slide_\d+\.png$/i.test(f))
     .filter(f => {
       const n = Number(f.match(/\d+/)[0]);
-      return n > TOTAL;
+      return n > expectedTotal;
     });
 
   if (missing.length || extra.length) {
     throw new Error(
-      `Rendered slide count does not match scripts count (${TOTAL}).` +
+      `Rendered slide count does not match scripts count (${expectedTotal}).` +
       (missing.length ? ` Missing: ${missing.join(', ')}.` : '') +
       (extra.length ? ` Extra: ${extra.join(', ')}.` : '')
     );
@@ -416,7 +511,6 @@ function capturePptxSlides(pptxFile) {
   }
 
   if (capturePptxWithPowerPoint(pptxFile)) {
-    assertSlideImagesComplete();
     console.log('  Done.\n');
     return;
   }
@@ -537,9 +631,7 @@ function buildAndConcat() {
 async function main() {
   console.log(`Project : ${PROJECT}`);
   if (PPTX) console.log(`PPTX    : ${PPTX}`);
-  console.log(`Slides  : ${TOTAL}`);
-  console.log('Engine  : edge_tts');
-  console.log(`Voice   : ${VOICE}\n`);
+  console.log('');
 
   // Wipe tmp only on a full run; preserve it when skipping phases
   if (!SKIP_SCREENSHOTS && !SKIP_AUDIO) {
@@ -550,8 +642,18 @@ async function main() {
   if (!SKIP_SCREENSHOTS) await captureSlides();
   if (SCREENSHOTS_ONLY) {
     console.log(`✅ Screenshots saved to ${TMP}`);
+    if (PPTX && process.platform === 'win32') {
+      console.log(`✅ Scripts saved to ${path.join(path.dirname(PPTX), PPTX_TEXT_JSON)}`);
+    }
     return;
   }
+
+  loadRuntimeScripts();
+  assertSlideImagesComplete();
+  console.log(`Slides  : ${TOTAL}`);
+  console.log('Engine  : edge_tts');
+  console.log(`Voice   : ${VOICE}\n`);
+
   if (!SKIP_AUDIO) await generateAudio();
   buildAndConcat();
 
