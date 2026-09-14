@@ -19,14 +19,14 @@ components:
         scopes:
           - "."
   H3:
-    status: not-installed
+    status: installed
   H4:
     status: not-installed
   H5:
-    status: not-installed
+    status: installed
   H6:
     status: not-installed
   H7:
     status: not-installed
   X:
-    status: not-installed
+    status: installed
