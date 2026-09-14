@@ -7,8 +7,7 @@
     "format:check": "prettier --check AGENTS.md .harness.yaml package.json eslint.config.js .prettierrc.json generate-video.mjs"
   },
   "dependencies": {
-    "msedge-tts": "^2.0.7",
-    "playwright": "^1.59.1"
+    "msedge-tts": "^2.0.7"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

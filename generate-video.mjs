@@ -15,9 +15,7 @@
  *
  * Inputs (inside <project-dir>):
  *   scripts.json             Narration scripts — see format below
- *   slide_01.png …           Pre-rendered slide images (optional)
- *   index.html               HTML slide deck (optional; Playwright captures it)
- *   *.pptx                   PowerPoint slide deck (optional; PowerPoint/LibreOffice captures it)
+ *   *.pptx                   PowerPoint slide deck (PowerPoint/LibreOffice captures it)
  *
  * scripts.json format:
  *   Simple array:
@@ -408,8 +406,6 @@ const SCREENSHOTS_ONLY = args.includes('--screenshots-only');
 const SKIP_SCREENSHOTS = args.includes('--skip-screenshots') || args.includes('--skip-images') || args.includes('--concat-only');
 const SKIP_AUDIO       = args.includes('--skip-audio')       || args.includes('--concat-only') || SCREENSHOTS_ONLY;
 const VOICE_ARG = getOptionValue('--voice');
-const HTML_VIEWPORT_WIDTH = 390;
-const HTML_VIEWPORT_HEIGHT = 844;
 const PPTX_IMAGE_WIDTH = 1920;
 const PPTX_IMAGE_HEIGHT = 1080;
 
@@ -420,14 +416,12 @@ function resolveInput(inputArg) {
   if (ext === '.pptx') {
     return {
       project: path.dirname(inputPath),
-      html: null,
       pptx: inputPath,
     };
   }
 
   return {
     project: inputPath,
-    html: path.join(inputPath, 'index.html'),
     pptx: null,
   };
 }
@@ -436,7 +430,6 @@ const INPUT     = resolveInput(projectArg);
 const PROJECT   = INPUT.project;
 const TMP       = path.join(PROJECT, 'tmp');
 const OUTPUT    = path.join(PROJECT, 'output.mp4');
-const HTML      = INPUT.html;
 let PPTX        = INPUT.pptx;
 
 if (!fs.existsSync(PROJECT)) {
@@ -554,49 +547,7 @@ function findPowerPointPowerShell() {
   return 'powershell.exe';
 }
 
-// ── Phase 1: Screenshots ──────────────────────────────────────────────────────
-
-function completePreRenderedSlides() {
-  const preRendered = Array.from({ length: TOTAL }, (_, i) =>
-    path.join(PROJECT, `slide_${pad(i + 1)}.png`)
-  ).filter(f => fs.existsSync(f));
-
-  return preRendered.length === TOTAL;
-}
-
-function copyPreRenderedSlides() {
-  console.log('📸 Phase 1: Using pre-rendered slide images...');
-  for (let i = 0; i < TOTAL; i++) {
-    const src = path.join(PROJECT, `slide_${pad(i + 1)}.png`);
-    const dst = path.join(TMP, `slide_${pad(i + 1)}.png`);
-    fs.copyFileSync(src, dst);
-    console.log(`  slide ${pad(i + 1)}/${TOTAL} → copied from project dir`);
-  }
-  console.log('  Done.\n');
-}
-
-async function captureHtmlSlides() {
-  console.log('📸 Phase 1: Capturing slides via Playwright...');
-  const { chromium } = await import('playwright');
-  const browser = await chromium.launch();
-  // deviceScaleFactor:2 → screenshots at 780×1688 (retina 2x, much sharper)
-  const context = await browser.newContext({ deviceScaleFactor: 2 });
-  const page    = await context.newPage();
-  await page.setViewportSize({ width: HTML_VIEWPORT_WIDTH, height: HTML_VIEWPORT_HEIGHT });
-  await page.goto(`file://${HTML}`);
-  await page.waitForLoadState('networkidle');
-
-  for (let i = 0; i < TOTAL; i++) {
-    await page.evaluate(idx => window.goTo(idx), i);
-    await page.waitForTimeout(600);
-    const file = path.join(TMP, `slide_${pad(i + 1)}.png`);
-    await page.screenshot({ path: file });
-    console.log(`  slide ${pad(i + 1)}/${TOTAL} → ${path.basename(file)}`);
-  }
-
-  await browser.close();
-  console.log('  Done.\n');
-}
+// ── Phase 1: PPTX slide capture ───────────────────────────────────────────────
 
 function findProjectPptx() {
   if (PPTX) return PPTX;
@@ -796,16 +747,6 @@ function capturePptxSlides(pptxFile) {
 }
 
 async function captureSlides() {
-  if (completePreRenderedSlides()) {
-    copyPreRenderedSlides();
-    return;
-  }
-
-  if (HTML && fs.existsSync(HTML)) {
-    await captureHtmlSlides();
-    return;
-  }
-
   const pptxFile = findProjectPptx();
   if (pptxFile) {
     PPTX = pptxFile;
@@ -814,8 +755,8 @@ async function captureSlides() {
   }
 
   throw new Error(
-    `No slide_NN.png files, index.html, or .pptx file found in ${PROJECT}.\n` +
-    `Place slide_01.png…slide_${pad(TOTAL)}.png in the project dir, add an index.html, or provide a .pptx file.`
+    `No .pptx file found in ${PROJECT}.\n` +
+    `Place a single .pptx in the project dir, or provide a .pptx file explicitly.`
   );
 }
 
